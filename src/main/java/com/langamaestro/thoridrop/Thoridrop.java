@@ -55,6 +55,8 @@ public final class Thoridrop {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     return createDrop(player, DropSession.Rarity.COMMON);
                 })
+                .then(Commands.literal("rare")
+                    .executes(context -> createDrop(context.getSource().getPlayerOrException(), DropSession.Rarity.RARE)))
                 .then(Commands.literal("legendary")
                     .executes(context -> createDrop(context.getSource().getPlayerOrException(), DropSession.Rarity.LEGENDARY))))
             .then(Commands.literal("stop")
