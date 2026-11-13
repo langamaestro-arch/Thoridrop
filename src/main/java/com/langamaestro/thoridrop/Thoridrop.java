@@ -223,6 +223,7 @@ public final class Thoridrop {
         if (session == null || dropPosition == null || dropLevel == null) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
+        if (session.phase() == DropSession.Phase.REWARDS) return;
         if (session.activate()) {
             waveDelay = 40;
             broadcast("Thoridrop activated! Wave 1 begins in 2 seconds.");
