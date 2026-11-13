@@ -1,0 +1,47 @@
+name: Build Thoridrop (Minecraft 26.3)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: thoridrop
+      - uses: actions/checkout@v4
+        with:
+          repository: NeoForgeMDKs/MDK-26.3-ModDevGradle
+          path: mdk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Configure MDK and inject Thoridrop sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mdk
+          sed -i 's/^mod_id=.*/mod_id=thoridrop/' gradle.properties
+          sed -i 's/^mod_name=.*/mod_name=Thoridrop/' gradle.properties
+          sed -i 's/^mod_group_id=.*/mod_group_id=com.langamaestro.thoridrop/' gradle.properties
+          sed -i 's/^mod_version=.*/mod_version=0.1.0/' gradle.properties
+          sed -i 's/^mod_license=.*/mod_license=MIT/' gradle.properties
+          sed -i 's/^neo_version=.*/neo_version=26.3.0.95/' gradle.properties
+          rm -rf src/main/java
+          mkdir -p src/main/java
+          cp -R ../thoridrop/src/main/java/. src/main/java/
+          find src/main/resources -type f -name '*.toml' -print
+      - name: Build with Gradle
+        working-directory: mdk
+        run: |
+          chmod +x gradlew
+          ./gradlew build --stacktrace --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Thoridrop-development-jar
+          path: mdk/build/libs/*.jar
+          if-no-files-found: error
