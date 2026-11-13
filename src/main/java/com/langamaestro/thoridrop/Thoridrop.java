@@ -31,6 +31,8 @@ public final class Thoridrop {
     private BlockPos dropPosition;
     private DropSession session;
     private int locatorTicks;
+    private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
+    private int waveDelay;
 
     public Thoridrop(IEventBus modBus) {
         DropBlocks.register(modBus);
@@ -68,6 +70,11 @@ public final class Thoridrop {
                             && isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock())) {
                         dropLevel.removeBlock(dropPosition, false);
                     }
+                    for (UUID id : waveMobs) {
+                        net.minecraft.world.entity.Entity mob = dropLevel.getEntity(id);
+                        if (mob != null) mob.discard();
+                    }
+                    waveMobs.clear();
                     session.finish();
                     session = null;
                     dropLevel = null;
@@ -118,6 +125,24 @@ public final class Thoridrop {
     @SubscribeEvent
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         if (session == null || dropLevel == null || dropPosition == null) return;
+        if (session.phase() == DropSession.Phase.COMBAT) {
+            if (waveDelay > 0) {
+                waveDelay--;
+                if (waveDelay == 0) spawnWave();
+            } else if (!waveMobs.isEmpty()) {
+                java.util.Iterator<UUID> it = waveMobs.iterator();
+                while (it.hasNext()) {
+                    net.minecraft.world.entity.Entity entity = dropLevel.getEntity(it.next());
+                    if (entity instanceof net.minecraft.world.entity.LivingEntity living && !living.isAlive()) {
+                        it.remove();
+                        if (session.enemyDefeated()) waveDelay = 60;
+                    }
+                }
+                if (session.phase() == DropSession.Phase.REWARDS) {
+                    broadcast("All 5 waves defeated! Thoridrop event complete.");
+                }
+            }
+        }
         if (++locatorTicks % 20 != 0) return;
         for (ServerPlayer player : dropLevel.players()) {
             double dx = dropPosition.getX() + 0.5 - player.getX();
@@ -134,14 +159,49 @@ public final class Thoridrop {
         }
     }
 
+    private void broadcast(String message) {
+        for (ServerPlayer p : dropLevel.players()) p.sendSystemMessage(Component.literal(message));
+    }
+
+    private void spawnWave() {
+        if (session == null || session.phase() != DropSession.Phase.COMBAT) return;
+        waveMobs.clear();
+        int wave = session.wave();
+        int extra = session.rarity() == DropSession.Rarity.LEGENDARY ? 3
+                  : session.rarity() == DropSession.Rarity.RARE ? 1 : 0;
+        int count = wave == 5 ? 1 : 2 + wave + extra;
+        net.minecraft.world.entity.EntityType<?>[] types = switch (wave) {
+            case 1 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.ZOMBIE};
+            case 2 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.ZOMBIE, net.minecraft.world.entity.EntityType.SKELETON};
+            case 3 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.SKELETON, net.minecraft.world.entity.EntityType.SPIDER};
+            case 4 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.HUSK, net.minecraft.world.entity.EntityType.STRAY};
+            default -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.RAVAGER};
+        };
+        for (int i = 0; i < count; i++) {
+            double angle = 2 * Math.PI * i / count;
+            int x = dropPosition.getX() + (int)Math.round(Math.cos(angle) * 9);
+            int z = dropPosition.getZ() + (int)Math.round(Math.sin(angle) * 9);
+            BlockPos spawn = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, dropPosition.getY(), z));
+            if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) continue;
+            net.minecraft.world.entity.Entity entity = types[i % types.length].create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
+            if (entity == null) continue;
+            entity.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
+            if (wave == 5) entity.setCustomName(Component.literal("THORIDROP BOSS"));
+            if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
+        }
+        session.setWaveEnemyCount(waveMobs.size());
+        broadcast("THORIDROP - Wave " + wave + "/5: " + waveMobs.size() + " enemies!");
+        if (waveMobs.isEmpty()) broadcast("No safe enemy spawn locations. Use /thoridrop stop and try open terrain.");
+    }
+
     @SubscribeEvent
     public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (session == null || dropPosition == null || dropLevel == null) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
         if (session.activate()) {
-            player.sendSystemMessage(Component.literal(
-                "Thoridrop activated! Combat waves are not implemented in this build."));
+            waveDelay = 40;
+            broadcast("Thoridrop activated! Wave 1 begins in 2 seconds.");
         }
         // Custom supply crates never expose a vanilla chest inventory.
         event.setCanceled(true);
