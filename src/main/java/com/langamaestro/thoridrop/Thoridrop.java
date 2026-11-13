@@ -171,11 +171,11 @@ public final class Thoridrop {
                   : session.rarity() == DropSession.Rarity.RARE ? 1 : 0;
         int count = wave == 5 ? 1 : 2 + wave + extra;
         net.minecraft.world.entity.EntityType<?>[] types = switch (wave) {
-            case 1 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.ZOMBIE};
-            case 2 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.ZOMBIE, net.minecraft.world.entity.EntityType.SKELETON};
-            case 3 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.SKELETON, net.minecraft.world.entity.EntityType.SPIDER};
-            case 4 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.HUSK, net.minecraft.world.entity.EntityType.STRAY};
-            default -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.world.entity.EntityType.RAVAGER};
+            case 1 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:zombie"))};
+            case 2 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:zombie")), net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:skeleton"))};
+            case 3 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:skeleton")), net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:spider"))};
+            case 4 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:husk")), net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:stray"))};
+            default -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager"))};
         };
         for (int i = 0; i < count; i++) {
             double angle = 2 * Math.PI * i / count;
@@ -185,7 +185,7 @@ public final class Thoridrop {
             if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) continue;
             net.minecraft.world.entity.Entity entity = types[i % types.length].create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
-            entity.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
+            entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
             if (wave == 5) entity.setCustomName(Component.literal("THORIDROP BOSS"));
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
