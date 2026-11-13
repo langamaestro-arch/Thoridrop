@@ -35,6 +35,17 @@ jobs:
           mkdir -p src/main/java
           cp -R ../thoridrop/src/main/java/. src/main/java/
           find src/main/resources -type f \( -name '*.toml' -o -name '*.json' \) -exec sed -i 's/examplemod/thoridrop/g; s/Example Mod/Thoridrop/g' {} +
+      - name: Run pure Java core logic tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-classes
+          javac -d test-classes \
+            thoridrop/src/main/java/com/langamaestro/thoridrop/DropSession.java \
+            thoridrop/src/main/java/com/langamaestro/thoridrop/DropScheduler.java \
+            thoridrop/src/main/java/com/langamaestro/thoridrop/RewardLedger.java \
+            thoridrop/src/test/java/com/langamaestro/thoridrop/CoreLogicTest.java
+          java -cp test-classes com.langamaestro.thoridrop.CoreLogicTest
       - name: Build with Gradle
         working-directory: mdk
         run: |
