@@ -30,6 +30,7 @@ public final class Thoridrop {
     private ServerLevel dropLevel;
     private BlockPos dropPosition;
     private DropSession session;
+    private int locatorTicks;
 
     public Thoridrop(IEventBus modBus) {
         DropBlocks.register(modBus);
@@ -112,6 +113,25 @@ public final class Thoridrop {
     private boolean isSupplyCrate(Block block) {
         return block == DropBlocks.COMMON.get() || block == DropBlocks.RARE.get()
                 || block == DropBlocks.LEGENDARY.get();
+    }
+
+    @SubscribeEvent
+    public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (session == null || dropLevel == null || dropPosition == null) return;
+        if (++locatorTicks % 20 != 0) return;
+        for (ServerPlayer player : dropLevel.players()) {
+            double dx = dropPosition.getX() + 0.5 - player.getX();
+            double dz = dropPosition.getZ() + 0.5 - player.getZ();
+            int distance = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
+            double bearing = Math.toDegrees(Math.atan2(-dx, dz));
+            double relative = net.minecraft.util.Mth.wrapDegrees(bearing - player.getYRot());
+            String arrow = Math.abs(relative) < 22.5 ? "↑"
+                : Math.abs(relative) > 157.5 ? "↓"
+                : relative > 0 ? (relative < 67.5 ? "↖" : relative < 112.5 ? "←" : "↙")
+                : (relative > -67.5 ? "↗" : relative > -112.5 ? "→" : "↘");
+            player.displayClientMessage(Component.literal(
+                "✦ THORIDROP " + session.rarity() + "  " + arrow + "  " + distance + "m  •  " + session.phase()), true);
+        }
     }
 
     @SubscribeEvent
