@@ -139,7 +139,8 @@ public final class Thoridrop {
                     }
                 }
                 if (session.phase() == DropSession.Phase.REWARDS) {
-                    broadcast("All 5 waves defeated! Thoridrop event complete.");
+                    unlockRewards();
+                    broadcast("All 5 waves defeated! Open the reward chest.");
                 }
             }
         }
@@ -156,6 +157,29 @@ public final class Thoridrop {
                 : (relative > -67.5 ? "↗" : relative > -112.5 ? "→" : "↘");
             player.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(Component.literal(
                 "✦ THORIDROP " + session.rarity() + "  " + arrow + "  " + distance + "m  •  " + session.phase())));
+        }
+    }
+
+    private void unlockRewards() {
+        if (dropLevel == null || dropPosition == null) return;
+        dropLevel.setBlockAndUpdate(dropPosition, Blocks.CHEST.defaultBlockState());
+        if (dropLevel.getBlockEntity(dropPosition) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
+            net.minecraft.world.item.ItemStack[] loot = switch (session.rarity()) {
+                case COMMON -> new net.minecraft.world.item.ItemStack[] {
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 12),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 3),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 1)};
+                case RARE -> new net.minecraft.world.item.ItemStack[] {
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 12),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 3)};
+                case LEGENDARY -> new net.minecraft.world.item.ItemStack[] {
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.NETHERITE_INGOT, 1),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 12),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, 1)};
+            };
+            for (int i = 0; i < loot.length; i++) chest.setItem(11 + i, loot[i]);
+            chest.setChanged();
         }
     }
 
