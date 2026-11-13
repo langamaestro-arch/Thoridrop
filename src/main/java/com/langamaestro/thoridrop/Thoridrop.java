@@ -33,6 +33,8 @@ public final class Thoridrop {
     private int locatorTicks;
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
     private int waveDelay;
+    private int waveTotal;
+    private final java.util.Set<UUID> participants = new java.util.HashSet<>();
     private final java.util.Set<UUID> claimedRewards = new java.util.HashSet<>();
 
     public Thoridrop(IEventBus modBus) {
@@ -124,6 +126,8 @@ public final class Thoridrop {
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         claimedRewards.clear();
+        participants.clear();
+        waveTotal = 0;
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
@@ -138,6 +142,11 @@ public final class Thoridrop {
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         if (session == null || dropLevel == null || dropPosition == null) return;
         if (session.phase() == DropSession.Phase.COMBAT) {
+            for (ServerPlayer player : dropLevel.players()) {
+                if (player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5, dropPosition.getZ() + 0.5) <= 24 * 24) {
+                    participants.add(player.getUUID());
+                }
+            }
             if (waveDelay > 0) {
                 waveDelay--;
                 if (waveDelay == 0) spawnWave();
@@ -151,7 +160,7 @@ public final class Thoridrop {
                     }
                 }
                 if (session.phase() == DropSession.Phase.REWARDS) {
-                    broadcast("All 5 waves defeated! Right-click the crate to claim your personal rewards.");
+                    broadcast("¡Cinco oleadas completadas! Los participantes pueden recoger su recompensa.");
                 }
             }
         }
@@ -166,8 +175,11 @@ public final class Thoridrop {
                 : Math.abs(relative) > 157.5 ? "↓"
                 : relative > 0 ? (relative < 67.5 ? "↖" : relative < 112.5 ? "←" : "↙")
                 : (relative > -67.5 ? "↗" : relative > -112.5 ? "→" : "↘");
+            String progress = session.phase() == DropSession.Phase.COMBAT
+                ? "  |  Oleada " + session.wave() + "/5  |  Eliminados " + (waveTotal - waveMobs.size()) + "/" + waveTotal + "  |  Restantes " + waveMobs.size()
+                : session.phase() == DropSession.Phase.REWARDS ? "  |  RECOMPENSAS" : "  |  DISPONIBLE";
             player.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(Component.literal(
-                "✦ THORIDROP " + rarityName(session.rarity()) + "  " + arrow + "  " + distance + "m  •  " + session.phase())));
+                "✦ THORIDROP " + rarityName(session.rarity()) + "  " + arrow + "  " + distance + "m" + progress)));
         }
     }
 
@@ -228,12 +240,28 @@ public final class Thoridrop {
         int extra = session.rarity() == DropSession.Rarity.LEGENDARY ? 3
                   : session.rarity() == DropSession.Rarity.RARE ? 1 : 0;
         int count = wave == 5 ? 1 : 2 + wave + extra;
-        net.minecraft.world.entity.EntityType<?>[] types = switch (wave) {
-            case 1 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:zombie"))};
-            case 2 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:zombie")), net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:skeleton"))};
-            case 3 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:skeleton")), net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:spider"))};
-            case 4 -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:husk")), net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:stray"))};
-            default -> new net.minecraft.world.entity.EntityType<?>[]{net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager"))};
+        String[] mobIds = switch (session.rarity()) {
+            case COMMON -> switch (wave) {
+                case 1 -> new String[]{"zombie"};
+                case 2 -> new String[]{"zombie", "skeleton"};
+                case 3 -> new String[]{"skeleton", "spider"};
+                case 4 -> new String[]{"husk", "stray"};
+                default -> new String[]{"ravager"};
+            };
+            case RARE -> switch (wave) {
+                case 1 -> new String[]{"husk", "skeleton"};
+                case 2 -> new String[]{"pillager", "stray"};
+                case 3 -> new String[]{"vindicator", "witch"};
+                case 4 -> new String[]{"evoker", "vindicator"};
+                default -> new String[]{"ravager", "vindicator"};
+            };
+            case LEGENDARY -> switch (wave) {
+                case 1 -> new String[]{"vindicator", "pillager"};
+                case 2 -> new String[]{"witch", "vindicator"};
+                case 3 -> new String[]{"evoker", "vindicator"};
+                case 4 -> new String[]{"piglin_brute", "evoker"};
+                default -> new String[]{"ravager", "evoker"};
+            };
         };
         for (int i = 0; i < count; i++) {
             double angle = 2 * Math.PI * i / count;
@@ -241,13 +269,17 @@ public final class Thoridrop {
             int z = dropPosition.getZ() + (int)Math.round(Math.sin(angle) * 9);
             BlockPos spawn = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, dropPosition.getY(), z));
             if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) continue;
-            net.minecraft.world.entity.Entity entity = types[i % types.length].create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
+            String mobId = mobIds[i % mobIds.length];
+            net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:" + mobId));
+            if (type == null) continue;
+            net.minecraft.world.entity.Entity entity = type.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
             if (wave == 5) entity.setCustomName(Component.literal("THORIDROP BOSS"));
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
-        session.setWaveEnemyCount(waveMobs.size());
+        waveTotal = waveMobs.size();
+        session.setWaveEnemyCount(waveTotal);
         broadcast("THORIDROP - Wave " + wave + "/5: " + waveMobs.size() + " enemies!");
         if (waveMobs.isEmpty()) broadcast("No safe enemy spawn locations. Use /thoridrop stop and try open terrain.");
     }
@@ -258,8 +290,21 @@ public final class Thoridrop {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
         if (session.phase() == DropSession.Phase.REWARDS) {
-            if (claimedRewards.add(player.getUUID())) grantRewards(player);
-            else player.sendSystemMessage(Component.literal("Thoridrop: you already claimed this supply drop."));
+            if (!participants.contains(player.getUUID())) {
+                player.sendSystemMessage(Component.literal("Thoridrop: no participaste en el combate."));
+            } else if (claimedRewards.add(player.getUUID())) {
+                grantRewards(player);
+                if (claimedRewards.containsAll(participants)) {
+                    dropLevel.removeBlock(dropPosition, false);
+                    broadcast("Todos los participantes han recogido sus recompensas. El suministro ha desaparecido.");
+                    session.finish();
+                    session = null;
+                    dropLevel = null;
+                    dropPosition = null;
+                }
+            } else {
+                player.sendSystemMessage(Component.literal("Thoridrop: ya recogiste tu recompensa."));
+            }
             event.setCanceled(true);
             return;
         }
