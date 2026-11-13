@@ -7,6 +7,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
@@ -29,7 +31,8 @@ public final class Thoridrop {
     private BlockPos dropPosition;
     private DropSession session;
 
-    public Thoridrop() {
+    public Thoridrop(IEventBus modBus) {
+        DropBlocks.register(modBus);
         NeoForge.EVENT_BUS.register(this);
         LOGGER.info("Thoridrop initialized");
     }
@@ -59,7 +62,7 @@ public final class Thoridrop {
                 .executes(context -> {
                     if (session == null) return 0;
                     if (dropLevel != null && dropPosition != null
-                            && dropLevel.getBlockState(dropPosition).is(Blocks.CHEST)) {
+                            && isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock())) {
                         dropLevel.removeBlock(dropPosition, false);
                     }
                     session.finish();
@@ -90,13 +93,23 @@ public final class Thoridrop {
             player.sendSystemMessage(Component.literal("Thoridrop: no clear position for the supply crate."));
             return 0;
         }
-        level.setBlockAndUpdate(pos, Blocks.CHEST.defaultBlockState());
+        Block crate = switch (rarity) {
+            case COMMON -> DropBlocks.COMMON.get();
+            case RARE -> DropBlocks.RARE.get();
+            case LEGENDARY -> DropBlocks.LEGENDARY.get();
+        };
+        level.setBlockAndUpdate(pos, crate.defaultBlockState());
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         player.sendSystemMessage(Component.literal("Thoridrop " + rarity
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
+    }
+
+    private boolean isSupplyCrate(Block block) {
+        return block == DropBlocks.COMMON.get() || block == DropBlocks.RARE.get()
+                || block == DropBlocks.LEGENDARY.get();
     }
 
     @SubscribeEvent
