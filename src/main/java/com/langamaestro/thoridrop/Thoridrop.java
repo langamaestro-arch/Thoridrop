@@ -164,24 +164,38 @@ public final class Thoridrop {
         if (dropLevel == null || dropPosition == null) return;
         dropLevel.setBlockAndUpdate(dropPosition, Blocks.CHEST.defaultBlockState());
         if (dropLevel.getBlockEntity(dropPosition) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
+            java.util.Random random = new java.util.Random();
+            net.minecraft.world.item.Item[] ironArmor = {
+                net.minecraft.world.item.Items.IRON_HELMET, net.minecraft.world.item.Items.IRON_CHESTPLATE,
+                net.minecraft.world.item.Items.IRON_LEGGINGS, net.minecraft.world.item.Items.IRON_BOOTS};
+            net.minecraft.world.item.Item[] diamondArmor = {
+                net.minecraft.world.item.Items.DIAMOND_HELMET, net.minecraft.world.item.Items.DIAMOND_CHESTPLATE,
+                net.minecraft.world.item.Items.DIAMOND_LEGGINGS, net.minecraft.world.item.Items.DIAMOND_BOOTS};
+            net.minecraft.world.item.Item[] ironGear = {
+                net.minecraft.world.item.Items.IRON_SWORD, net.minecraft.world.item.Items.IRON_PICKAXE,
+                net.minecraft.world.item.Items.IRON_AXE, net.minecraft.world.item.Items.IRON_SHOVEL};
+            net.minecraft.world.item.Item[] diamondGear = {
+                net.minecraft.world.item.Items.DIAMOND_SWORD, net.minecraft.world.item.Items.DIAMOND_PICKAXE,
+                net.minecraft.world.item.Items.DIAMOND_AXE, net.minecraft.world.item.Items.DIAMOND_SHOVEL};
             net.minecraft.world.item.ItemStack[] loot = switch (session.rarity()) {
                 case COMMON -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_HELMET),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_PICKAXE),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 12),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.TORCH, 8)};
+                    new net.minecraft.world.item.ItemStack(ironArmor[random.nextInt(ironArmor.length)]),
+                    new net.minecraft.world.item.ItemStack(ironGear[random.nextInt(ironGear.length)]),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 4 + random.nextInt(5)),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 12)};
                 case RARE -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_CHESTPLATE),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_SWORD),
+                    new net.minecraft.world.item.ItemStack(ironArmor[random.nextInt(ironArmor.length)]),
+                    new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 2 + random.nextInt(3)),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 12),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 2)};
                 case LEGENDARY -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_CHESTPLATE),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_BOOTS),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE),
+                    new net.minecraft.world.item.ItemStack(diamondArmor[random.nextInt(diamondArmor.length)]),
+                    new net.minecraft.world.item.ItemStack(diamondArmor[random.nextInt(diamondArmor.length)]),
+                    new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5 + random.nextInt(4)),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 16),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.SPECTRAL_ARROW, 8)};
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4)};
             };
             for (int i = 0; i < loot.length; i++) chest.setItem(11 + i, loot[i]);
             chest.setChanged();
