@@ -166,17 +166,22 @@ public final class Thoridrop {
         if (dropLevel.getBlockEntity(dropPosition) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
             net.minecraft.world.item.ItemStack[] loot = switch (session.rarity()) {
                 case COMMON -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 12),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 3),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 1)};
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_HELMET),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_PICKAXE),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 12),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.TORCH, 8)};
                 case RARE -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 12),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 3)};
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_CHESTPLATE),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_SWORD),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 12),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 2)};
                 case LEGENDARY -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.NETHERITE_INGOT, 1),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 12),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, 1)};
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_CHESTPLATE),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_BOOTS),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 16),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.SPECTRAL_ARROW, 8)};
             };
             for (int i = 0; i < loot.length; i++) chest.setItem(11 + i, loot[i]);
             chest.setChanged();
