@@ -129,8 +129,8 @@ public final class Thoridrop {
                 : Math.abs(relative) > 157.5 ? "↓"
                 : relative > 0 ? (relative < 67.5 ? "↖" : relative < 112.5 ? "←" : "↙")
                 : (relative > -67.5 ? "↗" : relative > -112.5 ? "→" : "↘");
-            player.displayClientMessage(Component.literal(
-                "✦ THORIDROP " + session.rarity() + "  " + arrow + "  " + distance + "m  •  " + session.phase()), true);
+            player.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(Component.literal(
+                "✦ THORIDROP " + session.rarity() + "  " + arrow + "  " + distance + "m  •  " + session.phase())));
         }
     }
 
