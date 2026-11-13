@@ -30,7 +30,7 @@ jobs:
           sed -i 's/^mod_group_id=.*/mod_group_id=com.langamaestro.thoridrop/' gradle.properties
           sed -i 's/^mod_version=.*/mod_version=0.1.0/' gradle.properties
           sed -i 's/^mod_license=.*/mod_license=MIT/' gradle.properties
-          sed -i 's/^neo_version=.*/neo_version=26.3.0.95/' gradle.properties
+          sed -i 's/^neo_version=.*/neo_version=26.3.0.102/' gradle.properties
           rm -rf src/main/java
           mkdir -p src/main/java
           cp -R ../thoridrop/src/main/java/. src/main/java/
