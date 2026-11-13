@@ -177,6 +177,7 @@ public final class Thoridrop {
             net.minecraft.world.item.Item[] diamondGear = {
                 net.minecraft.world.item.Items.DIAMOND_SWORD, net.minecraft.world.item.Items.DIAMOND_PICKAXE,
                 net.minecraft.world.item.Items.DIAMOND_AXE, net.minecraft.world.item.Items.DIAMOND_SHOVEL};
+            int firstArmorIndex = random.nextInt(diamondArmor.length);
             net.minecraft.world.item.ItemStack[] loot = switch (session.rarity()) {
                 case COMMON -> new net.minecraft.world.item.ItemStack[] {
                     new net.minecraft.world.item.ItemStack(ironArmor[random.nextInt(ironArmor.length)]),
@@ -190,8 +191,8 @@ public final class Thoridrop {
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 12),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 2)};
                 case LEGENDARY -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(diamondArmor[random.nextInt(diamondArmor.length)]),
-                    new net.minecraft.world.item.ItemStack(diamondArmor[random.nextInt(diamondArmor.length)]),
+                    new net.minecraft.world.item.ItemStack(diamondArmor[firstArmorIndex]),
+                    new net.minecraft.world.item.ItemStack(diamondArmor[(firstArmorIndex + 1 + random.nextInt(diamondArmor.length - 1)) % diamondArmor.length]),
                     new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5 + random.nextInt(4)),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 16),
