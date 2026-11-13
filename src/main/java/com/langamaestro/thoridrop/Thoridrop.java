@@ -48,7 +48,7 @@ public final class Thoridrop {
                 .executes(context -> {
                     String message = session == null
                         ? "Thoridrop: no active supply crate."
-                        : "Thoridrop: " + session.phase() + ", wave " + session.wave()
+                        : "Thoridrop " + rarityName(session.rarity()) + ": " + session.phase() + ", wave " + session.wave()
                             + "/" + session.waveCount() + " at " + dropPosition.toShortString();
                     context.getSource().sendSuccess(() -> Component.literal(message), false);
                     return 1;
@@ -59,9 +59,11 @@ public final class Thoridrop {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     return createDrop(player, DropSession.Rarity.COMMON);
                 })
-                .then(Commands.literal("rare")
+                .then(Commands.literal("normal")
+                    .executes(context -> createDrop(context.getSource().getPlayerOrException(), DropSession.Rarity.COMMON)))
+                .then(Commands.literal("mitico")
                     .executes(context -> createDrop(context.getSource().getPlayerOrException(), DropSession.Rarity.RARE)))
-                .then(Commands.literal("legendary")
+                .then(Commands.literal("legendario")
                     .executes(context -> createDrop(context.getSource().getPlayerOrException(), DropSession.Rarity.LEGENDARY))))
             .then(Commands.literal("stop")
                 .requires(source -> source.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN))
@@ -84,6 +86,14 @@ public final class Thoridrop {
                     return 1;
                 }))
         );
+    }
+
+    private static String rarityName(DropSession.Rarity rarity) {
+        return switch (rarity) {
+            case COMMON -> "NORMAL";
+            case RARE -> "MÍTICO";
+            case LEGENDARY -> "LEGENDARIO";
+        };
     }
 
     private int createDrop(ServerPlayer player, DropSession.Rarity rarity) {
@@ -114,7 +124,7 @@ public final class Thoridrop {
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         claimedRewards.clear();
-        player.sendSystemMessage(Component.literal("Thoridrop " + rarity
+        player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
     }
@@ -157,7 +167,7 @@ public final class Thoridrop {
                 : relative > 0 ? (relative < 67.5 ? "↖" : relative < 112.5 ? "←" : "↙")
                 : (relative > -67.5 ? "↗" : relative > -112.5 ? "→" : "↘");
             player.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(Component.literal(
-                "✦ THORIDROP " + session.rarity() + "  " + arrow + "  " + distance + "m  •  " + session.phase())));
+                "✦ THORIDROP " + rarityName(session.rarity()) + "  " + arrow + "  " + distance + "m  •  " + session.phase())));
         }
     }
 
