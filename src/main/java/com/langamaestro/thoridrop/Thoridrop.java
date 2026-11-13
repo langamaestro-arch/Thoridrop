@@ -198,7 +198,10 @@ public final class Thoridrop {
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4)};
             };
             for (net.minecraft.world.item.ItemStack item : loot) {
-                if (!player.getInventory().add(item)) player.drop(item, false);
+                if (!player.getInventory().add(item)) {
+                    net.minecraft.world.entity.item.ItemEntity dropped = new net.minecraft.world.entity.item.ItemEntity(dropLevel, player.getX(), player.getY(), player.getZ(), item);
+                    dropLevel.addFreshEntity(dropped);
+                }
             }
             player.sendSystemMessage(Component.literal("Thoridrop: personal rewards delivered!"));
         }
