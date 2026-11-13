@@ -121,7 +121,7 @@ public final class Thoridrop {
             player.sendSystemMessage(Component.literal(
                 "Thoridrop activated! Combat waves are not implemented in this build."));
         }
-        // Prevent opening the crate before the reward phase.
-        if (session.phase() != DropSession.Phase.REWARDS) event.setCanceled(true);
+        // Custom supply crates never expose a vanilla chest inventory.
+        event.setCanceled(true);
     }
 }
