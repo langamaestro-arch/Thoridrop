@@ -34,6 +34,7 @@ jobs:
           rm -rf src/main/java
           mkdir -p src/main/java
           cp -R ../thoridrop/src/main/java/. src/main/java/
+          cp -R ../thoridrop/src/main/resources/. src/main/resources/
           find src/main/resources -type f \( -name '*.toml' -o -name '*.json' \) -exec sed -i 's/examplemod/thoridrop/g; s/Example Mod/Thoridrop/g; s/Example mod description\./Thoridrop development build./g' {} +
           if [ -d src/main/resources/assets/examplemod ]; then
             mkdir -p src/main/resources/assets/thoridrop
