@@ -34,7 +34,12 @@ jobs:
           rm -rf src/main/java
           mkdir -p src/main/java
           cp -R ../thoridrop/src/main/java/. src/main/java/
-          find src/main/resources -type f \( -name '*.toml' -o -name '*.json' \) -exec sed -i 's/examplemod/thoridrop/g; s/Example Mod/Thoridrop/g' {} +
+          find src/main/resources -type f \( -name '*.toml' -o -name '*.json' \) -exec sed -i 's/examplemod/thoridrop/g; s/Example Mod/Thoridrop/g; s/Example mod description\./Thoridrop development build./g' {} +
+          if [ -d src/main/resources/assets/examplemod ]; then
+            mkdir -p src/main/resources/assets/thoridrop
+            cp -R src/main/resources/assets/examplemod/. src/main/resources/assets/thoridrop/
+            rm -rf src/main/resources/assets/examplemod
+          fi
       - name: Run pure Java core logic tests
         shell: bash
         run: |
