@@ -33,6 +33,7 @@ public final class Thoridrop {
     private int locatorTicks;
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
     private int waveDelay;
+    private final java.util.Set<UUID> claimedRewards = new java.util.HashSet<>();
 
     public Thoridrop(IEventBus modBus) {
         DropBlocks.register(modBus);
@@ -112,6 +113,7 @@ public final class Thoridrop {
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
+        claimedRewards.clear();
         player.sendSystemMessage(Component.literal("Thoridrop " + rarity
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
@@ -139,8 +141,7 @@ public final class Thoridrop {
                     }
                 }
                 if (session.phase() == DropSession.Phase.REWARDS) {
-                    unlockRewards();
-                    broadcast("All 5 waves defeated! Open the reward chest.");
+                    broadcast("All 5 waves defeated! Right-click the crate to claim your personal rewards.");
                 }
             }
         }
@@ -160,10 +161,8 @@ public final class Thoridrop {
         }
     }
 
-    private void unlockRewards() {
-        if (dropLevel == null || dropPosition == null) return;
-        dropLevel.setBlockAndUpdate(dropPosition, Blocks.CHEST.defaultBlockState());
-        if (dropLevel.getBlockEntity(dropPosition) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
+    private void grantRewards(ServerPlayer player) {
+        {
             java.util.Random random = new java.util.Random();
             net.minecraft.world.item.Item[] ironArmor = {
                 net.minecraft.world.item.Items.IRON_HELMET, net.minecraft.world.item.Items.IRON_CHESTPLATE,
@@ -198,8 +197,10 @@ public final class Thoridrop {
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 16),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4)};
             };
-            for (int i = 0; i < loot.length; i++) chest.setItem(11 + i, loot[i]);
-            chest.setChanged();
+            for (net.minecraft.world.item.ItemStack item : loot) {
+                if (!player.getInventory().add(item)) player.drop(item, false);
+            }
+            player.sendSystemMessage(Component.literal("Thoridrop: personal rewards delivered!"));
         }
     }
 
@@ -243,7 +244,12 @@ public final class Thoridrop {
         if (session == null || dropPosition == null || dropLevel == null) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
-        if (session.phase() == DropSession.Phase.REWARDS) return;
+        if (session.phase() == DropSession.Phase.REWARDS) {
+            if (claimedRewards.add(player.getUUID())) grantRewards(player);
+            else player.sendSystemMessage(Component.literal("Thoridrop: you already claimed this supply drop."));
+            event.setCanceled(true);
+            return;
+        }
         if (session.activate()) {
             waveDelay = 40;
             broadcast("Thoridrop activated! Wave 1 begins in 2 seconds.");
