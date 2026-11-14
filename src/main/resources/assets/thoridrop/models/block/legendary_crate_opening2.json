@@ -1,12 +1,13 @@
 {
   "textures": {
-    "wood": "minecraft:block/nether_bricks",
+    "wood": "minecraft:block/red_nether_bricks",
     "edge": "minecraft:block/gold_block",
-    "shadow": "minecraft:block/polished_blackstone",
+    "shadow": "minecraft:block/nether_bricks",
     "band": "minecraft:block/red_nether_bricks",
     "gem": "minecraft:block/redstone_block",
-    "shine": "minecraft:block/emerald_block",
-    "particle": "minecraft:block/nether_bricks"
+    "shine": "minecraft:block/orange_concrete",
+    "feet": "minecraft:block/gold_block",
+    "particle": "minecraft:block/red_nether_bricks"
   },
   "elements": [
     {
