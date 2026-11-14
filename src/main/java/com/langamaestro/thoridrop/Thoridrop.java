@@ -31,6 +31,8 @@ public final class Thoridrop {
     private BlockPos dropPosition;
     private DropSession session;
     private int locatorTicks;
+    private int arrivalTicks;
+    private Block arrivingCrate;
     private net.minecraft.server.level.ServerBossEvent eventBar;
     private final java.util.Map<UUID, net.minecraft.server.level.ServerBossEvent> locatorBars = new java.util.HashMap<>();
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
@@ -84,11 +86,13 @@ public final class Thoridrop {
                         if (mob != null) mob.discard();
                     }
                     waveMobs.clear();
+                    arrivalTicks = 0;
                     clearHud();
                     session.finish();
                     session = null;
                     dropLevel = null;
                     dropPosition = null;
+                    arrivalTicks = 0;
                     context.getSource().sendSuccess(() -> Component.literal("Thoridrop event stopped."), true);
                     return 1;
                 }))
@@ -134,7 +138,9 @@ public final class Thoridrop {
             case RARE -> DropBlocks.RARE.get();
             case LEGENDARY -> DropBlocks.LEGENDARY.get();
         };
-        level.setBlockAndUpdate(pos, crate.defaultBlockState());
+        // Keep the destination clear while the supply crate descends.
+        arrivingCrate = crate;
+        arrivalTicks = 55;
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
@@ -153,6 +159,7 @@ public final class Thoridrop {
         waveTotal = 0;
         chestOpen = false;
         chestOpeningTicks = -1;
+        player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
@@ -171,6 +178,10 @@ public final class Thoridrop {
     @SubscribeEvent
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         if (session == null || dropLevel == null || dropPosition == null) return;
+        if (arrivalTicks > 0) {
+            tickArrival();
+            return;
+        }
         if (session.phase() == DropSession.Phase.COMBAT) {
             for (ServerPlayer player : dropLevel.players()) {
                 if (player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5, dropPosition.getZ() + 0.5) <= 24 * 24) {
@@ -270,6 +281,41 @@ public final class Thoridrop {
             );
         eventBar.setProgress(session.phase() == DropSession.Phase.COMBAT && waveTotal > 0
             ? Math.max(0.0f, Math.min(1.0f, (float) waveMobs.size() / waveTotal)) : 1.0f);
+    }
+
+    private void tickArrival() {
+        arrivalTicks--;
+        double x = dropPosition.getX() + 0.5;
+        double y = dropPosition.getY() + 0.5;
+        double z = dropPosition.getZ() + 0.5;
+        double altitude = y + arrivalTicks * 0.6;
+        // Dense moving particle shell makes the falling crate visible from below.
+        dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CLOUD,
+            x, altitude, z, 12, 0.45, 0.35, 0.45, 0.015);
+        dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+            x, altitude, z, 6, 0.3, 0.25, 0.3, 0.025);
+        if (arrivalTicks % 10 == 0) {
+            dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CLOUD,
+                x, altitude + 1, z, 16, 0.65, 0.2, 0.65, 0.025);
+        }
+        if (arrivalTicks == 0) {
+            if (dropLevel.getBlockState(dropPosition).isAir()) {
+                dropLevel.setBlockAndUpdate(dropPosition, arrivingCrate.defaultBlockState());
+                dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.POOF,
+                    x, y, z, 75, 1.1, 0.45, 1.1, 0.12);
+                dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CLOUD,
+                    x, y, z, 55, 1.0, 0.3, 1.0, 0.06);
+                dropLevel.playSound(null, dropPosition, net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(),
+                    net.minecraft.sounds.SoundSource.BLOCKS, 0.8f, 0.7f);
+                broadcast("¡THORIDROP HA ATERRIZADO! Acércate y activa el suministro.");
+            } else {
+                broadcast("Thoridrop: aterrizaje cancelado, el destino está bloqueado.");
+                clearHud();
+                session = null;
+                dropLevel = null;
+                dropPosition = null;
+            }
+        }
     }
 
     private void clearHud() {
@@ -394,7 +440,7 @@ public final class Thoridrop {
 
     @SubscribeEvent
     public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
-        if (session == null || dropPosition == null || dropLevel == null) return;
+        if (session == null || dropPosition == null || dropLevel == null || arrivalTicks > 0) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
         if (session.phase() == DropSession.Phase.REWARDS) {
