@@ -34,6 +34,7 @@ public final class Thoridrop {
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
     private int waveDelay;
     private int waveTotal;
+    private boolean chestOpen;
     private final java.util.Set<UUID> participants = new java.util.HashSet<>();
     private final java.util.Set<UUID> claimedRewards = new java.util.HashSet<>();
 
@@ -128,6 +129,7 @@ public final class Thoridrop {
         claimedRewards.clear();
         participants.clear();
         waveTotal = 0;
+        chestOpen = false;
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
@@ -135,7 +137,9 @@ public final class Thoridrop {
 
     private boolean isSupplyCrate(Block block) {
         return block == DropBlocks.COMMON.get() || block == DropBlocks.RARE.get()
-                || block == DropBlocks.LEGENDARY.get();
+                || block == DropBlocks.LEGENDARY.get()
+                || block == DropBlocks.COMMON_OPEN.get() || block == DropBlocks.RARE_OPEN.get()
+                || block == DropBlocks.LEGENDARY_OPEN.get();
     }
 
     @SubscribeEvent
@@ -290,6 +294,18 @@ public final class Thoridrop {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
         if (session.phase() == DropSession.Phase.REWARDS) {
+            if (!chestOpen) {
+                Block opened = switch (session.rarity()) {
+                    case COMMON -> DropBlocks.COMMON_OPEN.get();
+                    case RARE -> DropBlocks.RARE_OPEN.get();
+                    case LEGENDARY -> DropBlocks.LEGENDARY_OPEN.get();
+                };
+                dropLevel.setBlockAndUpdate(dropPosition, opened.defaultBlockState());
+                chestOpen = true;
+                player.sendSystemMessage(Component.literal("¡Cofre abierto! Haz clic de nuevo para recoger tu recompensa."));
+                event.setCanceled(true);
+                return;
+            }
             if (!participants.contains(player.getUUID())) {
                 player.sendSystemMessage(Component.literal("Thoridrop: no participaste en el combate."));
             } else if (claimedRewards.add(player.getUUID())) {
