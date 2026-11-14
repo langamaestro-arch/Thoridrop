@@ -31,6 +31,8 @@ public final class Thoridrop {
     private BlockPos dropPosition;
     private DropSession session;
     private int locatorTicks;
+    private long automaticTicks;
+    private static final long AUTO_INTERVAL_TICKS = 20L * 60 * 60; // 60 minutes
     private int arrivalTicks;
     private Block arrivingCrate;
     private net.minecraft.server.level.ServerBossEvent eventBar;
@@ -177,7 +179,25 @@ public final class Thoridrop {
 
     @SubscribeEvent
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
-        if (session == null || dropLevel == null || dropPosition == null) return;
+        if (session == null) {
+            if (++automaticTicks >= AUTO_INTERVAL_TICKS) {
+                automaticTicks = 0;
+                var server = event.getServer();
+                var players = server.getPlayerList().getPlayers();
+                if (!players.isEmpty()) {
+                    ServerPlayer target = players.get(server.overworld().random.nextInt(players.size()));
+                    DropSession.Rarity rarity = switch (server.overworld().random.nextInt(10)) {
+                        case 0 -> DropSession.Rarity.LEGENDARY;
+                        case 1, 2, 3 -> DropSession.Rarity.RARE;
+                        default -> DropSession.Rarity.COMMON;
+                    };
+                    createDrop(target, rarity);
+                    if (session != null) broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
+                }
+            }
+            return;
+        }
+        if (dropLevel == null || dropPosition == null) return;
         if (arrivalTicks > 0) {
             tickArrival();
             return;
@@ -217,6 +237,17 @@ public final class Thoridrop {
             }
         }
         if (++locatorTicks % 5 != 0) return;
+        if (session.phase() == DropSession.Phase.AVAILABLE) {
+            double bx = dropPosition.getX() + 0.5, by = dropPosition.getY() + 1.0, bz = dropPosition.getZ() + 0.5;
+            var beaconParticle = switch (session.rarity()) {
+                case COMMON -> net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME;
+                case RARE -> net.minecraft.core.particles.ParticleTypes.PORTAL;
+                case LEGENDARY -> net.minecraft.core.particles.ParticleTypes.FLAME;
+            };
+            for (int height = 0; height < 20; height += 2) {
+                dropLevel.sendParticles(beaconParticle, bx, by + height, bz, 3, 0.18, 0.45, 0.18, 0.01);
+            }
+        }
         if (session.phase() == DropSession.Phase.AVAILABLE) {
             if (eventBar != null) eventBar.removeAllPlayers();
             for (ServerPlayer player : dropLevel.players()) {
@@ -416,7 +447,13 @@ public final class Thoridrop {
             net.minecraft.world.entity.Entity entity = type.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
-            if (wave == 5) entity.setCustomName(Component.literal("THORIDROP BOSS"));
+            if (wave == 5 && entity instanceof net.minecraft.world.entity.LivingEntity boss) {
+                boss.setCustomName(Component.literal("✦ GUARDIÁN " + rarityName(session.rarity()) + " ✦").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
+                boss.setCustomNameVisible(true);
+                boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
+                boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
+                if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 60 * 10, 0));
+            }
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
         waveTotal = waveMobs.size();
