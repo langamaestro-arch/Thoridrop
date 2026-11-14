@@ -32,6 +32,7 @@ public final class Thoridrop {
     private DropSession session;
     private int locatorTicks;
     private net.minecraft.server.level.ServerBossEvent eventBar;
+    private final java.util.Map<UUID, net.minecraft.server.level.ServerBossEvent> locatorBars = new java.util.HashMap<>();
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
     private int waveDelay;
     private int waveTotal;
@@ -83,8 +84,7 @@ public final class Thoridrop {
                         if (mob != null) mob.discard();
                     }
                     waveMobs.clear();
-                    if (eventBar != null) { eventBar.removeAllPlayers(); eventBar = null; }
-                    if (eventBar != null) { eventBar.removeAllPlayers(); eventBar = null; }
+                    clearHud();
                     session.finish();
                     session = null;
                     dropLevel = null;
@@ -130,6 +130,7 @@ public final class Thoridrop {
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
+        clearHud();
         eventBar = new net.minecraft.server.level.ServerBossEvent(
             Component.literal("✦ THORIDROP  •  " + rarityName(rarity)),
             switch (rarity) {
@@ -196,7 +197,44 @@ public final class Thoridrop {
                 broadcast("¡Cofre abierto! Haz clic para recoger tu recompensa.");
             }
         }
-        if (++locatorTicks % 20 != 0) return;
+        if (++locatorTicks % 5 != 0) return;
+        if (session.phase() == DropSession.Phase.AVAILABLE) {
+            if (eventBar != null) eventBar.removeAllPlayers();
+            for (ServerPlayer player : dropLevel.players()) {
+                net.minecraft.server.level.ServerBossEvent bar = locatorBars.computeIfAbsent(
+                    player.getUUID(), id -> new net.minecraft.server.level.ServerBossEvent(
+                        Component.literal("THORIDROP  •  LOCALIZADOR"),
+                        switch (session.rarity()) {
+                            case COMMON -> net.minecraft.world.BossEvent.BossBarColor.BLUE;
+                            case RARE -> net.minecraft.world.BossEvent.BossBarColor.PURPLE;
+                            case LEGENDARY -> net.minecraft.world.BossEvent.BossBarColor.RED;
+                        }, net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS));
+                if (!bar.getPlayers().contains(player)) bar.addPlayer(player);
+                double dx = dropPosition.getX() + 0.5 - player.getX();
+                double dz = dropPosition.getZ() + 0.5 - player.getZ();
+                int distance = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
+                double targetYaw = Math.toDegrees(Math.atan2(-dx, dz));
+                double delta = net.minecraft.util.Mth.wrapDegrees(targetYaw - player.getYRot());
+                int slot = (int) Math.round(4.0 + Math.max(-1.0, Math.min(1.0, delta / 90.0)) * 4.0);
+                StringBuilder compass = new StringBuilder();
+                for (int i = 0; i < 9; i++) compass.append(i == slot ? "▣" : "─");
+                boolean aligned = Math.abs(delta) < 12.0;
+                bar.setName(Component.literal("✦ " + rarityName(session.rarity()) + "  "
+                    + compass + "  " + distance + "m  "
+                    + (aligned ? "¡DE FRENTE!" : delta > 0 ? "GIRA A LA DERECHA" : "GIRA A LA IZQUIERDA")));
+                bar.setProgress(Math.max(0.05f, Math.min(1.0f, 1.0f - distance / 250.0f)));
+            }
+            for (UUID id : java.util.List.copyOf(locatorBars.keySet())) {
+                boolean present = dropLevel.players().stream().anyMatch(p -> p.getUUID().equals(id));
+                if (!present) {
+                    locatorBars.get(id).removeAllPlayers();
+                    locatorBars.remove(id);
+                }
+            }
+            return;
+        }
+        for (var bar : locatorBars.values()) bar.removeAllPlayers();
+        locatorBars.clear();
         if (eventBar == null) return;
         for (ServerPlayer player : dropLevel.players()) {
             if (!eventBar.getPlayers().contains(player)) eventBar.addPlayer(player);
@@ -205,17 +243,22 @@ public final class Thoridrop {
             if (player.level() != dropLevel) eventBar.removePlayer(player);
         }
         String state = switch (session.phase()) {
-            case AVAILABLE -> "ACÉRCATE Y ACTIVA EL SUMINISTRO";
+            case AVAILABLE -> "BUSCANDO SUMINISTRO";
             case COMBAT -> "OLEADA " + session.wave() + "/5  •  ELIMINADOS "
                 + Math.max(0, waveTotal - waveMobs.size()) + "/" + waveTotal
                 + "  •  RESTANTES " + waveMobs.size();
             case REWARDS -> "RECOMPENSAS DESBLOQUEADAS  •  ABRE EL COFRE";
             case FINISHED -> "EVENTO FINALIZADO";
         };
-        eventBar.setName(Component.literal("✦ THORIDROP " + rarityName(session.rarity()) + "  ◆  " + state
-            + "  ◆  X:" + dropPosition.getX() + " Z:" + dropPosition.getZ()));
+        eventBar.setName(Component.literal("✦ THORIDROP " + rarityName(session.rarity()) + "  ◆  " + state));
         eventBar.setProgress(session.phase() == DropSession.Phase.COMBAT && waveTotal > 0
             ? Math.max(0.0f, Math.min(1.0f, (float) waveMobs.size() / waveTotal)) : 1.0f);
+    }
+
+    private void clearHud() {
+        if (eventBar != null) { eventBar.removeAllPlayers(); eventBar = null; }
+        for (var bar : locatorBars.values()) bar.removeAllPlayers();
+        locatorBars.clear();
     }
 
     private void grantRewards(ServerPlayer player) {
