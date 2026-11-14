@@ -38,6 +38,8 @@ public final class Thoridrop {
     private net.minecraft.server.level.ServerBossEvent eventBar;
     private final java.util.Map<UUID, net.minecraft.server.level.ServerBossEvent> locatorBars = new java.util.HashMap<>();
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
+    private final java.util.Map<UUID, java.util.List<net.minecraft.world.item.ItemStack>> deathInventories = new java.util.HashMap<>();
+    private final java.util.Map<UUID, Integer> deathExperience = new java.util.HashMap<>();
     private int waveDelay;
     private int waveTotal;
     private boolean chestOpen;
@@ -215,7 +217,8 @@ public final class Thoridrop {
                 java.util.Iterator<UUID> it = waveMobs.iterator();
                 while (it.hasNext()) {
                     net.minecraft.world.entity.Entity entity = dropLevel.getEntity(it.next());
-                    if (entity instanceof net.minecraft.world.entity.LivingEntity living && !living.isAlive()) {
+                    if (entity == null || (entity instanceof net.minecraft.world.entity.LivingEntity living && !living.isAlive())) {
+                        // An unloaded or despawned enemy must never soft-lock the wave.
                         it.remove();
                         if (session.enemyDefeated()) waveDelay = 60;
                     }
@@ -454,6 +457,7 @@ public final class Thoridrop {
                 boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
                 if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 60 * 10, 0));
             }
+            if (entity instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
         waveTotal = waveMobs.size();
@@ -473,6 +477,55 @@ public final class Thoridrop {
                 : stage == 2 ? DropBlocks.LEGENDARY_OPENING2.get() : DropBlocks.LEGENDARY_OPEN.get();
         };
         dropLevel.setBlockAndUpdate(dropPosition, block.defaultBlockState());
+    }
+
+    private boolean fightingNearDrop(ServerPlayer player) {
+        return session != null && session.phase() == DropSession.Phase.COMBAT
+            && dropLevel != null && dropPosition != null && player.level() == dropLevel
+            && player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5,
+                dropPosition.getZ() + 0.5) <= 32 * 32;
+    }
+
+    @SubscribeEvent
+    public void onPlayerDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || !fightingNearDrop(player)) return;
+        UUID id = player.getUUID();
+        participants.add(id);
+        java.util.List<net.minecraft.world.item.ItemStack> saved = new java.util.ArrayList<>();
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            saved.add(player.getInventory().getItem(i).copy());
+        }
+        deathInventories.put(id, saved);
+        deathExperience.put(id, player.totalExperience);
+        player.sendSystemMessage(Component.literal("Thoridrop: conservarás tu inventario y reaparecerás junto al suministro."));
+    }
+
+    @SubscribeEvent
+    public void onPlayerDrops(net.neoforged.neoforge.event.entity.living.LivingDropsEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && deathInventories.containsKey(player.getUUID())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerRespawn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        java.util.List<net.minecraft.world.item.ItemStack> saved = deathInventories.remove(player.getUUID());
+        if (saved == null) return;
+        for (int i = 0; i < saved.size() && i < player.getInventory().getContainerSize(); i++) {
+            player.getInventory().setItem(i, saved.get(i));
+        }
+        Integer experience = deathExperience.remove(player.getUUID());
+        if (experience != null) player.giveExperiencePoints(experience);
+        if (session != null && dropLevel != null && dropPosition != null
+                && session.phase() == DropSession.Phase.COMBAT) {
+            BlockPos safe = dropLevel.getHeightmapPos(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                dropPosition.offset(4, 0, 4));
+            player.teleportTo(dropLevel, safe.getX() + 0.5, safe.getY() + 0.5, safe.getZ() + 0.5,
+                java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+            player.sendSystemMessage(Component.literal("Thoridrop: has regresado al combate con tu equipo."));
+        }
     }
 
     @SubscribeEvent
