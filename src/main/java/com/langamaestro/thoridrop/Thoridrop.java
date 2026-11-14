@@ -533,18 +533,18 @@ public final class Thoridrop {
         if (experience != null) player.giveExperiencePoints(experience);
         if (respawnPending.remove(player.getUUID()) && session != null && dropLevel != null
                 && dropPosition != null && session.phase() == DropSession.Phase.COMBAT) {
-            // Load the target chunk before querying height; never teleport to an unloaded void.
-            BlockPos target = dropPosition.offset(4, 0, 4);
-            dropLevel.getChunkAt(target);
-            BlockPos safe = dropLevel.getHeightmapPos(
-                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, target);
-            if (safe.getY() > dropLevel.getMinY() + 4 && dropLevel.getBlockState(safe).isAir()
-                    && dropLevel.getBlockState(safe.above()).isAir()) {
-                player.teleportTo(dropLevel, safe.getX() + 0.5, safe.getY() + 0.2, safe.getZ() + 0.5,
-                    java.util.Set.of(), player.getYRot(), player.getXRot(), false);
-                player.sendSystemMessage(Component.literal("Thoridrop: has regresado al combate con tu equipo."));
+            // The crate position is authoritative: respawn directly on top of it.
+            dropLevel.getChunkAt(dropPosition);
+            BlockPos feet = dropPosition.above();
+            BlockPos head = feet.above();
+            if (isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock())
+                    && dropLevel.getBlockState(feet).getCollisionShape(dropLevel, feet).isEmpty()
+                    && dropLevel.getBlockState(head).getCollisionShape(dropLevel, head).isEmpty()) {
+                player.teleportTo(dropLevel, dropPosition.getX() + 0.5, dropPosition.getY() + 1.05,
+                    dropPosition.getZ() + 0.5, java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+                player.sendSystemMessage(Component.literal("Thoridrop: has reaparecido sobre el suministro con tu equipo."));
             } else {
-                player.sendSystemMessage(Component.literal("Thoridrop: no hay un punto seguro junto al suministro. Se conserva tu respawn normal."));
+                player.sendSystemMessage(Component.literal("Thoridrop: el espacio sobre el cofre está obstruido; se mantiene tu respawn normal."));
             }
         }
     }
