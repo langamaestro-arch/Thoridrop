@@ -185,6 +185,8 @@ public final class Thoridrop {
     @SubscribeEvent
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         if (session == null) {
+            // Defensive cleanup of stale boss bars even after an interrupted event.
+            if (eventBar != null || !locatorBars.isEmpty()) clearHud();
             if (++automaticTicks >= AUTO_INTERVAL_TICKS) {
                 automaticTicks = 0;
                 var server = event.getServer();
@@ -253,14 +255,14 @@ public final class Thoridrop {
             }
         }
         if (++locatorTicks % 5 != 0) return;
-        if (session.phase() == DropSession.Phase.AVAILABLE) {
+        if (session.phase() == DropSession.Phase.AVAILABLE || session.phase() == DropSession.Phase.COMBAT) {
             double bx = dropPosition.getX() + 0.5, by = dropPosition.getY() + 1.0, bz = dropPosition.getZ() + 0.5;
             var beaconParticle = switch (session.rarity()) {
                 case COMMON -> net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME;
                 case RARE -> net.minecraft.core.particles.ParticleTypes.PORTAL;
                 case LEGENDARY -> net.minecraft.core.particles.ParticleTypes.FLAME;
             };
-            for (int height = 0; height < 20; height += 2) {
+            for (int height = 0; height < 32; height += 2) {
                 dropLevel.sendParticles(beaconParticle, bx, by + height, bz, 3, 0.18, 0.45, 0.18, 0.01);
             }
         }
@@ -469,6 +471,7 @@ public final class Thoridrop {
                 boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
                 boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
                 if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 60 * 10, 0));
+                boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 20 * 60 * 10, 0));
             }
             if (entity instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
@@ -567,6 +570,7 @@ public final class Thoridrop {
                 if (claimedRewards.containsAll(participants)) {
                     dropLevel.removeBlock(dropPosition, false);
                     broadcast("Todos los participantes han recogido sus recompensas. El suministro ha desaparecido.");
+                    clearHud();
                     session.finish();
                     session = null;
                     dropLevel = null;
