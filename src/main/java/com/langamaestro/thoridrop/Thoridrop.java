@@ -185,8 +185,8 @@ public final class Thoridrop {
                 var server = event.getServer();
                 var players = server.getPlayerList().getPlayers();
                 if (!players.isEmpty()) {
-                    ServerPlayer target = players.get(server.overworld().random.nextInt(players.size()));
-                    DropSession.Rarity rarity = switch (server.overworld().random.nextInt(10)) {
+                    ServerPlayer target = players.get(net.minecraft.util.RandomSource.create().nextInt(players.size()));
+                    DropSession.Rarity rarity = switch (net.minecraft.util.RandomSource.create().nextInt(10)) {
                         case 0 -> DropSession.Rarity.LEGENDARY;
                         case 1, 2, 3 -> DropSession.Rarity.RARE;
                         default -> DropSession.Rarity.COMMON;
