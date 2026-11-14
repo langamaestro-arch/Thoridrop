@@ -218,7 +218,6 @@ public final class Thoridrop {
             } else if (!waveMobs.isEmpty()) {
                 java.util.Iterator<UUID> it = waveMobs.iterator();
                 while (it.hasNext()) {
-                    net.minecraft.world.entity.Entity entity = dropLevel.getEntity(it.next());
                     UUID mobId = it.next();
                     net.minecraft.world.entity.Entity entity = dropLevel.getEntity(mobId);
                     boolean defeated = entity instanceof net.minecraft.world.entity.LivingEntity living && !living.isAlive();
