@@ -24,6 +24,19 @@ public final class DropBlocks {
     public static final DeferredBlock<Block> LEGENDARY_OPEN = BLOCKS.registerSimpleBlock("legendary_crate_open",
             properties -> properties.mapColor(MapColor.COLOR_PURPLE).strength(4.0f));
 
+    public static final DeferredBlock<Block> COMMON_OPENING1 = BLOCKS.registerSimpleBlock("common_crate_opening1",
+            properties -> properties.mapColor(MapColor.WOOD).strength(4.0f));
+    public static final DeferredBlock<Block> COMMON_OPENING2 = BLOCKS.registerSimpleBlock("common_crate_opening2",
+            properties -> properties.mapColor(MapColor.WOOD).strength(4.0f));
+    public static final DeferredBlock<Block> RARE_OPENING1 = BLOCKS.registerSimpleBlock("rare_crate_opening1",
+            properties -> properties.mapColor(MapColor.COLOR_BLUE).strength(4.0f));
+    public static final DeferredBlock<Block> RARE_OPENING2 = BLOCKS.registerSimpleBlock("rare_crate_opening2",
+            properties -> properties.mapColor(MapColor.COLOR_BLUE).strength(4.0f));
+    public static final DeferredBlock<Block> LEGENDARY_OPENING1 = BLOCKS.registerSimpleBlock("legendary_crate_opening1",
+            properties -> properties.mapColor(MapColor.COLOR_PURPLE).strength(4.0f));
+    public static final DeferredBlock<Block> LEGENDARY_OPENING2 = BLOCKS.registerSimpleBlock("legendary_crate_opening2",
+            properties -> properties.mapColor(MapColor.COLOR_PURPLE).strength(4.0f));
+
     private DropBlocks() {}
     public static void register(IEventBus bus) { BLOCKS.register(bus); }
 }
