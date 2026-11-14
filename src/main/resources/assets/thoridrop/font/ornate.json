@@ -1,0 +1,19 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "thoridrop:font/ornate.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        "ABCDEFGHIJKLMNOP",
+        "QRSTUVWXYZ012345",
+        "6789:/◆✦─"
+      ]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

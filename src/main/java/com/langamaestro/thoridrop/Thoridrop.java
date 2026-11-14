@@ -232,7 +232,8 @@ public final class Thoridrop {
                     .append(Component.literal(compass.toString()).withStyle(net.minecraft.ChatFormatting.AQUA, net.minecraft.ChatFormatting.BOLD))
                     .append(Component.literal("  " + distance + "m  ").withStyle(net.minecraft.ChatFormatting.YELLOW))
                     .append(Component.literal(aligned ? "◆ OBJETIVO ENFRENTE ◆" : delta > 0 ? "◀ GIRA A LA DERECHA" : "GIRA A LA IZQUIERDA ▶")
-                        .withStyle(aligned ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD)));
+                        .withStyle(aligned ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD))
+                    .withStyle(style -> style.withFont(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("thoridrop", "ornate"))));
                 bar.setProgress(Math.max(0.05f, Math.min(1.0f, 1.0f - distance / 250.0f)));
             }
             for (UUID id : java.util.List.copyOf(locatorBars.keySet())) {
@@ -265,7 +266,8 @@ public final class Thoridrop {
             .append(Component.literal(rarityName(session.rarity())).withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD))
             .append(Component.literal("  ◆  ").withStyle(net.minecraft.ChatFormatting.DARK_GRAY))
             .append(Component.literal(state).withStyle(session.phase() == DropSession.Phase.REWARDS
-                ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD)));
+                ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD))
+            .withStyle(style -> style.withFont(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("thoridrop", "ornate"))));
         eventBar.setProgress(session.phase() == DropSession.Phase.COMBAT && waveTotal > 0
             ? Math.max(0.0f, Math.min(1.0f, (float) waveMobs.size() / waveTotal)) : 1.0f);
     }
