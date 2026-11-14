@@ -256,15 +256,15 @@ public final class Thoridrop {
                 case 1 -> new String[]{"husk", "skeleton"};
                 case 2 -> new String[]{"pillager", "stray"};
                 case 3 -> new String[]{"vindicator", "witch"};
-                case 4 -> new String[]{"evoker", "vindicator"};
+                case 4 -> new String[]{"vindicator", "pillager"};
                 default -> new String[]{"ravager", "vindicator"};
             };
             case LEGENDARY -> switch (wave) {
                 case 1 -> new String[]{"vindicator", "pillager"};
                 case 2 -> new String[]{"witch", "vindicator"};
-                case 3 -> new String[]{"evoker", "vindicator"};
+                case 3 -> new String[]{"witch", "vindicator"};
                 case 4 -> new String[]{"piglin_brute", "evoker"};
-                default -> new String[]{"ravager", "evoker"};
+                default -> new String[]{"ravager", "vindicator"};
             };
         };
         for (int i = 0; i < count; i++) {
