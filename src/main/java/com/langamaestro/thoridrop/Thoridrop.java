@@ -42,6 +42,8 @@ public final class Thoridrop {
     private final java.util.Map<UUID, Integer> deathExperience = new java.util.HashMap<>();
     private final java.util.Map<UUID, Integer> missingMobTicks = new java.util.HashMap<>();
     private final java.util.Set<UUID> respawnPending = new java.util.HashSet<>();
+    private int guardianAttackTicks;
+    private BlockPos beaconLightPosition;
     private int waveDelay;
     private int waveTotal;
     private boolean chestOpen;
@@ -93,7 +95,9 @@ public final class Thoridrop {
                     }
                     waveMobs.clear();
                     arrivalTicks = 0;
+                    removeBeaconLight();
                     clearHud();
+                    removeBeaconLight();
                     clearHud();
                     session.finish();
                     session = null;
@@ -164,6 +168,8 @@ public final class Thoridrop {
         claimedRewards.clear();
         participants.clear();
         waveTotal = 0;
+        guardianAttackTicks = 0;
+        beaconLightPosition = null;
         chestOpen = false;
         chestOpeningTicks = -1;
         player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
@@ -210,6 +216,7 @@ public final class Thoridrop {
             return;
         }
         if (session.phase() == DropSession.Phase.COMBAT) {
+            if (session.wave() == 5 && waveDelay == 0 && !waveMobs.isEmpty()) tickGuardianAbility();
             for (ServerPlayer player : dropLevel.players()) {
                 if (player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5, dropPosition.getZ() + 0.5) <= 24 * 24) {
                     participants.add(player.getUUID());
@@ -256,6 +263,7 @@ public final class Thoridrop {
         }
         if (++locatorTicks % 5 != 0) return;
         if (session.phase() == DropSession.Phase.AVAILABLE || session.phase() == DropSession.Phase.COMBAT) {
+            ensureBeaconLight();
             double bx = dropPosition.getX() + 0.5, by = dropPosition.getY() + 1.0, bz = dropPosition.getZ() + 0.5;
             var beaconParticle = switch (session.rarity()) {
                 case COMMON -> net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME;
@@ -263,7 +271,8 @@ public final class Thoridrop {
                 case LEGENDARY -> net.minecraft.core.particles.ParticleTypes.FLAME;
             };
             for (int height = 0; height < 32; height += 2) {
-                dropLevel.sendParticles(beaconParticle, bx, by + height, bz, 3, 0.18, 0.45, 0.18, 0.01);
+                dropLevel.sendParticles(beaconParticle, bx, by + height, bz, 5, 0.12, 0.25, 0.12, 0.005);
+                dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD, bx, by + height, bz, 1, 0.06, 0.20, 0.06, 0.001);
             }
         }
         if (session.phase() == DropSession.Phase.AVAILABLE) {
@@ -316,7 +325,7 @@ public final class Thoridrop {
         }
         String state = switch (session.phase()) {
             case AVAILABLE -> "BUSCANDO SUMINISTRO";
-            case COMBAT -> "OLEADA " + session.wave() + "/5  •  ELIMINADOS "
+            case COMBAT -> (session.wave() == 5 ? "GUARDIÁN FINAL  •  " : "") + "OLEADA " + session.wave() + "/5  •  ELIMINADOS "
                 + Math.max(0, waveTotal - waveMobs.size()) + "/" + waveTotal;
             case REWARDS -> "RECOMPENSAS DESBLOQUEADAS  •  ABRE EL COFRE";
             case FINISHED -> "EVENTO FINALIZADO";
@@ -358,10 +367,54 @@ public final class Thoridrop {
                 broadcast("¡THORIDROP HA ATERRIZADO! Acércate y activa el suministro.");
             } else {
                 broadcast("Thoridrop: aterrizaje cancelado, el destino está bloqueado.");
+                removeBeaconLight();
                 clearHud();
                 session = null;
                 dropLevel = null;
                 dropPosition = null;
+            }
+        }
+    }
+
+    /** A non-destructive local light source for the beacon; only occupies existing air. */
+    private void ensureBeaconLight() {
+        if (beaconLightPosition != null || dropLevel == null || dropPosition == null) return;
+        BlockPos candidate = dropPosition.above(3);
+        if (dropLevel.getBlockState(candidate).isAir()) {
+            dropLevel.setBlockAndUpdate(candidate, Blocks.LIGHT.defaultBlockState());
+            beaconLightPosition = candidate.immutable();
+        }
+    }
+
+    private void removeBeaconLight() {
+        if (beaconLightPosition != null && dropLevel != null
+                && dropLevel.getBlockState(beaconLightPosition).is(Blocks.LIGHT)) {
+            dropLevel.removeBlock(beaconLightPosition, false);
+        }
+        beaconLightPosition = null;
+    }
+
+    /** Distinctive fifth-wave guardian ability: a periodic telegraphed area attack. */
+    private void tickGuardianAbility() {
+        if (++guardianAttackTicks % 100 != 0) return;
+        for (UUID id : waveMobs) {
+            net.minecraft.world.entity.Entity entity = dropLevel.getEntity(id);
+            if (!(entity instanceof net.minecraft.world.entity.Mob guardian) || !guardian.isAlive()) continue;
+            double x = guardian.getX(), y = guardian.getY() + 1, z = guardian.getZ();
+            var particle = session.rarity() == DropSession.Rarity.LEGENDARY
+                ? net.minecraft.core.particles.ParticleTypes.FLAME
+                : net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME;
+            dropLevel.sendParticles(particle, x, y, z, 55, 2.5, 0.4, 2.5, 0.04);
+            for (ServerPlayer player : dropLevel.players()) {
+                if (player.distanceToSqr(x, y, z) > 7 * 7 || player.isCreative() || player.isSpectator()) continue;
+                int duration = session.rarity() == DropSession.Rarity.LEGENDARY ? 100 : 60;
+                player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.SLOWNESS, duration, 0));
+                if (session.rarity() != DropSession.Rarity.COMMON) {
+                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.WEAKNESS, duration, 0));
+                }
+                player.sendSystemMessage(Component.literal("¡El Guardián libera una onda de energía!"));
             }
         }
     }
@@ -425,6 +478,7 @@ public final class Thoridrop {
     private void spawnWave() {
         if (session == null || session.phase() != DropSession.Phase.COMBAT) return;
         waveMobs.clear();
+        guardianAttackTicks = 0;
         missingMobTicks.clear();
         int wave = session.wave();
         int extra = session.rarity() == DropSession.Rarity.LEGENDARY ? 3
@@ -569,6 +623,7 @@ public final class Thoridrop {
                 grantRewards(player);
                 if (claimedRewards.containsAll(participants)) {
                     dropLevel.removeBlock(dropPosition, false);
+                    removeBeaconLight();
                     broadcast("Todos los participantes han recogido sus recompensas. El suministro ha desaparecido.");
                     clearHud();
                     session.finish();
