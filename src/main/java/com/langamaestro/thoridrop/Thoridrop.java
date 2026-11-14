@@ -40,6 +40,8 @@ public final class Thoridrop {
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
     private final java.util.Map<UUID, java.util.List<net.minecraft.world.item.ItemStack>> deathInventories = new java.util.HashMap<>();
     private final java.util.Map<UUID, Integer> deathExperience = new java.util.HashMap<>();
+    private final java.util.Map<UUID, Integer> missingMobTicks = new java.util.HashMap<>();
+    private final java.util.Set<UUID> respawnPending = new java.util.HashSet<>();
     private int waveDelay;
     private int waveTotal;
     private boolean chestOpen;
@@ -217,8 +219,19 @@ public final class Thoridrop {
                 java.util.Iterator<UUID> it = waveMobs.iterator();
                 while (it.hasNext()) {
                     net.minecraft.world.entity.Entity entity = dropLevel.getEntity(it.next());
-                    if (entity == null || (entity instanceof net.minecraft.world.entity.LivingEntity living && !living.isAlive())) {
-                        // An unloaded or despawned enemy must never soft-lock the wave.
+                    UUID mobId = it.next();
+                    net.minecraft.world.entity.Entity entity = dropLevel.getEntity(mobId);
+                    boolean defeated = entity instanceof net.minecraft.world.entity.LivingEntity living && !living.isAlive();
+                    if (entity == null) {
+                        // Do not advance waves when the chunk is unloaded or the player dies.
+                        // After 30 seconds with an active participant nearby, recover a missing mob.
+                        boolean nearby = dropLevel.players().stream().anyMatch(p ->
+                            p.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5,
+                                dropPosition.getZ() + 0.5) < 32 * 32);
+                        if (nearby && missingMobTicks.merge(mobId, 1, Integer::sum) >= 600) defeated = true;
+                    } else missingMobTicks.remove(mobId);
+                    if (defeated) {
+                        missingMobTicks.remove(mobId);
                         it.remove();
                         if (session.enemyDefeated()) waveDelay = 60;
                     }
@@ -411,6 +424,7 @@ public final class Thoridrop {
     private void spawnWave() {
         if (session == null || session.phase() != DropSession.Phase.COMBAT) return;
         waveMobs.clear();
+        missingMobTicks.clear();
         int wave = session.wave();
         int extra = session.rarity() == DropSession.Rarity.LEGENDARY ? 3
                   : session.rarity() == DropSession.Rarity.RARE ? 1 : 0;
@@ -496,6 +510,7 @@ public final class Thoridrop {
             saved.add(player.getInventory().getItem(i).copy());
         }
         deathInventories.put(id, saved);
+        respawnPending.add(id);
         deathExperience.put(id, player.totalExperience);
         player.sendSystemMessage(Component.literal("Thoridrop: conservarás tu inventario y reaparecerás junto al suministro."));
     }
@@ -517,14 +532,21 @@ public final class Thoridrop {
         }
         Integer experience = deathExperience.remove(player.getUUID());
         if (experience != null) player.giveExperiencePoints(experience);
-        if (session != null && dropLevel != null && dropPosition != null
-                && session.phase() == DropSession.Phase.COMBAT) {
+        if (respawnPending.remove(player.getUUID()) && session != null && dropLevel != null
+                && dropPosition != null && session.phase() == DropSession.Phase.COMBAT) {
+            // Load the target chunk before querying height; never teleport to an unloaded void.
+            BlockPos target = dropPosition.offset(4, 0, 4);
+            dropLevel.getChunkAt(target);
             BlockPos safe = dropLevel.getHeightmapPos(
-                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                dropPosition.offset(4, 0, 4));
-            player.teleportTo(dropLevel, safe.getX() + 0.5, safe.getY() + 0.5, safe.getZ() + 0.5,
-                java.util.Set.of(), player.getYRot(), player.getXRot(), false);
-            player.sendSystemMessage(Component.literal("Thoridrop: has regresado al combate con tu equipo."));
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, target);
+            if (safe.getY() > dropLevel.getMinY() + 4 && dropLevel.getBlockState(safe).isAir()
+                    && dropLevel.getBlockState(safe.above()).isAir()) {
+                player.teleportTo(dropLevel, safe.getX() + 0.5, safe.getY() + 0.2, safe.getZ() + 0.5,
+                    java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+                player.sendSystemMessage(Component.literal("Thoridrop: has regresado al combate con tu equipo."));
+            } else {
+                player.sendSystemMessage(Component.literal("Thoridrop: no hay un punto seguro junto al suministro. Se conserva tu respawn normal."));
+            }
         }
     }
 
