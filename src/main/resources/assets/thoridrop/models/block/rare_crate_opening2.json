@@ -1,13 +1,13 @@
 {
   "textures": {
-    "wood": "minecraft:block/polished_blackstone_bricks",
+    "wood": "minecraft:block/polished_blackstone",
     "edge": "minecraft:block/gold_block",
     "shadow": "minecraft:block/obsidian",
-    "band": "minecraft:block/cracked_polished_blackstone_bricks",
+    "band": "minecraft:block/polished_blackstone_bricks",
     "gem": "minecraft:block/amethyst_block",
     "shine": "minecraft:block/purple_concrete",
     "feet": "minecraft:block/gilded_blackstone",
-    "particle": "minecraft:block/polished_blackstone_bricks"
+    "particle": "minecraft:block/polished_blackstone"
   },
   "elements": [
     {
