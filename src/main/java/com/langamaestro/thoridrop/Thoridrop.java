@@ -95,6 +95,14 @@ public final class Thoridrop {
         );
     }
 
+    private static net.minecraft.ChatFormatting rarityColor(DropSession.Rarity rarity) {
+        return switch (rarity) {
+            case COMMON -> net.minecraft.ChatFormatting.AQUA;
+            case RARE -> net.minecraft.ChatFormatting.LIGHT_PURPLE;
+            case LEGENDARY -> net.minecraft.ChatFormatting.GOLD;
+        };
+    }
+
     private static String rarityName(DropSession.Rarity rarity) {
         return switch (rarity) {
             case COMMON -> "NORMAL";
@@ -219,9 +227,12 @@ public final class Thoridrop {
                 StringBuilder compass = new StringBuilder();
                 for (int i = 0; i < 9; i++) compass.append(i == slot ? "▣" : "─");
                 boolean aligned = Math.abs(delta) < 12.0;
-                bar.setName(Component.literal("✦ " + rarityName(session.rarity()) + "  "
-                    + compass + "  " + distance + "m  "
-                    + (aligned ? "¡DE FRENTE!" : delta > 0 ? "GIRA A LA DERECHA" : "GIRA A LA IZQUIERDA")));
+                bar.setName(Component.literal("✦ THORIDROP  ").withStyle(net.minecraft.ChatFormatting.GOLD, net.minecraft.ChatFormatting.BOLD)
+                    .append(Component.literal(rarityName(session.rarity()) + "  ").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD))
+                    .append(Component.literal(compass.toString()).withStyle(net.minecraft.ChatFormatting.AQUA, net.minecraft.ChatFormatting.BOLD))
+                    .append(Component.literal("  " + distance + "m  ").withStyle(net.minecraft.ChatFormatting.YELLOW))
+                    .append(Component.literal(aligned ? "◆ OBJETIVO ENFRENTE ◆" : delta > 0 ? "◀ GIRA A LA DERECHA" : "GIRA A LA IZQUIERDA ▶")
+                        .withStyle(aligned ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD)));
                 bar.setProgress(Math.max(0.05f, Math.min(1.0f, 1.0f - distance / 250.0f)));
             }
             for (UUID id : java.util.List.copyOf(locatorBars.keySet())) {
@@ -250,7 +261,11 @@ public final class Thoridrop {
             case REWARDS -> "RECOMPENSAS DESBLOQUEADAS  •  ABRE EL COFRE";
             case FINISHED -> "EVENTO FINALIZADO";
         };
-        eventBar.setName(Component.literal("✦ THORIDROP " + rarityName(session.rarity()) + "  ◆  " + state));
+        eventBar.setName(Component.literal("✦ THORIDROP  ").withStyle(net.minecraft.ChatFormatting.GOLD, net.minecraft.ChatFormatting.BOLD)
+            .append(Component.literal(rarityName(session.rarity())).withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD))
+            .append(Component.literal("  ◆  ").withStyle(net.minecraft.ChatFormatting.DARK_GRAY))
+            .append(Component.literal(state).withStyle(session.phase() == DropSession.Phase.REWARDS
+                ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD)));
         eventBar.setProgress(session.phase() == DropSession.Phase.COMBAT && waveTotal > 0
             ? Math.max(0.0f, Math.min(1.0f, (float) waveMobs.size() / waveTotal)) : 1.0f);
     }
