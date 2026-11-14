@@ -94,6 +94,7 @@ public final class Thoridrop {
                     waveMobs.clear();
                     arrivalTicks = 0;
                     clearHud();
+                    clearHud();
                     session.finish();
                     session = null;
                     dropLevel = null;
@@ -314,8 +315,7 @@ public final class Thoridrop {
         String state = switch (session.phase()) {
             case AVAILABLE -> "BUSCANDO SUMINISTRO";
             case COMBAT -> "OLEADA " + session.wave() + "/5  •  ELIMINADOS "
-                + Math.max(0, waveTotal - waveMobs.size()) + "/" + waveTotal
-                + "  •  RESTANTES " + waveMobs.size();
+                + Math.max(0, waveTotal - waveMobs.size()) + "/" + waveTotal;
             case REWARDS -> "RECOMPENSAS DESBLOQUEADAS  •  ABRE EL COFRE";
             case FINISHED -> "EVENTO FINALIZADO";
         };
