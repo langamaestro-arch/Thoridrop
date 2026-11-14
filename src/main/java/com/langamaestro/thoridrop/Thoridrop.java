@@ -31,6 +31,7 @@ public final class Thoridrop {
     private BlockPos dropPosition;
     private DropSession session;
     private int locatorTicks;
+    private net.minecraft.server.level.ServerBossEvent eventBar;
     private final java.util.Set<UUID> waveMobs = new java.util.HashSet<>();
     private int waveDelay;
     private int waveTotal;
@@ -82,6 +83,8 @@ public final class Thoridrop {
                         if (mob != null) mob.discard();
                     }
                     waveMobs.clear();
+                    if (eventBar != null) { eventBar.removeAllPlayers(); eventBar = null; }
+                    if (eventBar != null) { eventBar.removeAllPlayers(); eventBar = null; }
                     session.finish();
                     session = null;
                     dropLevel = null;
@@ -127,6 +130,15 @@ public final class Thoridrop {
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
+        eventBar = new net.minecraft.server.level.ServerBossEvent(
+            Component.literal("✦ THORIDROP  •  " + rarityName(rarity)),
+            switch (rarity) {
+                case COMMON -> net.minecraft.world.BossEvent.BossBarColor.BLUE;
+                case RARE -> net.minecraft.world.BossEvent.BossBarColor.PURPLE;
+                case LEGENDARY -> net.minecraft.world.BossEvent.BossBarColor.RED;
+            },
+            net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS);
+        eventBar.setProgress(1.0f);
         claimedRewards.clear();
         participants.clear();
         waveTotal = 0;
@@ -185,22 +197,25 @@ public final class Thoridrop {
             }
         }
         if (++locatorTicks % 20 != 0) return;
+        if (eventBar == null) return;
         for (ServerPlayer player : dropLevel.players()) {
-            double dx = dropPosition.getX() + 0.5 - player.getX();
-            double dz = dropPosition.getZ() + 0.5 - player.getZ();
-            int distance = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
-            double bearing = Math.toDegrees(Math.atan2(-dx, dz));
-            double relative = net.minecraft.util.Mth.wrapDegrees(bearing - player.getYRot());
-            String arrow = Math.abs(relative) < 22.5 ? "↑"
-                : Math.abs(relative) > 157.5 ? "↓"
-                : relative > 0 ? (relative < 67.5 ? "↖" : relative < 112.5 ? "←" : "↙")
-                : (relative > -67.5 ? "↗" : relative > -112.5 ? "→" : "↘");
-            String progress = session.phase() == DropSession.Phase.COMBAT
-                ? "  |  Oleada " + session.wave() + "/5  |  Eliminados " + (waveTotal - waveMobs.size()) + "/" + waveTotal + "  |  Restantes " + waveMobs.size()
-                : session.phase() == DropSession.Phase.REWARDS ? "  |  RECOMPENSAS" : "  |  DISPONIBLE";
-            player.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(Component.literal(
-                "✦ THORIDROP " + rarityName(session.rarity()) + "  " + arrow + "  " + distance + "m" + progress)));
+            if (!eventBar.getPlayers().contains(player)) eventBar.addPlayer(player);
         }
+        for (ServerPlayer player : java.util.List.copyOf(eventBar.getPlayers())) {
+            if (player.level() != dropLevel) eventBar.removePlayer(player);
+        }
+        String state = switch (session.phase()) {
+            case AVAILABLE -> "ACÉRCATE Y ACTIVA EL SUMINISTRO";
+            case COMBAT -> "OLEADA " + session.wave() + "/5  •  ELIMINADOS "
+                + Math.max(0, waveTotal - waveMobs.size()) + "/" + waveTotal
+                + "  •  RESTANTES " + waveMobs.size();
+            case REWARDS -> "RECOMPENSAS DESBLOQUEADAS  •  ABRE EL COFRE";
+            case FINISHED -> "EVENTO FINALIZADO";
+        };
+        eventBar.setName(Component.literal("✦ THORIDROP " + rarityName(session.rarity()) + "  ◆  " + state
+            + "  ◆  X:" + dropPosition.getX() + " Z:" + dropPosition.getZ()));
+        eventBar.setProgress(session.phase() == DropSession.Phase.COMBAT && waveTotal > 0
+            ? Math.max(0.0f, Math.min(1.0f, (float) waveMobs.size() / waveTotal)) : 1.0f);
     }
 
     private void grantRewards(ServerPlayer player) {
