@@ -132,7 +132,7 @@ public final class Thoridrop {
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         clearHud();
         eventBar = new net.minecraft.server.level.ServerBossEvent(
-            Component.literal("✦ THORIDROP  •  " + rarityName(rarity)),
+            UUID.randomUUID(), Component.literal("✦ THORIDROP  •  " + rarityName(rarity)),
             switch (rarity) {
                 case COMMON -> net.minecraft.world.BossEvent.BossBarColor.BLUE;
                 case RARE -> net.minecraft.world.BossEvent.BossBarColor.PURPLE;
@@ -203,7 +203,7 @@ public final class Thoridrop {
             for (ServerPlayer player : dropLevel.players()) {
                 net.minecraft.server.level.ServerBossEvent bar = locatorBars.computeIfAbsent(
                     player.getUUID(), id -> new net.minecraft.server.level.ServerBossEvent(
-                        Component.literal("THORIDROP  •  LOCALIZADOR"),
+                        UUID.randomUUID(), Component.literal("THORIDROP  •  LOCALIZADOR"),
                         switch (session.rarity()) {
                             case COMMON -> net.minecraft.world.BossEvent.BossBarColor.BLUE;
                             case RARE -> net.minecraft.world.BossEvent.BossBarColor.PURPLE;
