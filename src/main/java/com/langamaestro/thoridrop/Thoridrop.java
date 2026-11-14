@@ -35,6 +35,7 @@ public final class Thoridrop {
     private int waveDelay;
     private int waveTotal;
     private boolean chestOpen;
+    private int chestOpeningTicks;
     private final java.util.Set<UUID> participants = new java.util.HashSet<>();
     private final java.util.Set<UUID> claimedRewards = new java.util.HashSet<>();
 
@@ -130,6 +131,7 @@ public final class Thoridrop {
         participants.clear();
         waveTotal = 0;
         chestOpen = false;
+        chestOpeningTicks = -1;
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
@@ -139,7 +141,10 @@ public final class Thoridrop {
         return block == DropBlocks.COMMON.get() || block == DropBlocks.RARE.get()
                 || block == DropBlocks.LEGENDARY.get()
                 || block == DropBlocks.COMMON_OPEN.get() || block == DropBlocks.RARE_OPEN.get()
-                || block == DropBlocks.LEGENDARY_OPEN.get();
+                || block == DropBlocks.LEGENDARY_OPEN.get()
+                || block == DropBlocks.COMMON_OPENING1.get() || block == DropBlocks.COMMON_OPENING2.get()
+                || block == DropBlocks.RARE_OPENING1.get() || block == DropBlocks.RARE_OPENING2.get()
+                || block == DropBlocks.LEGENDARY_OPENING1.get() || block == DropBlocks.LEGENDARY_OPENING2.get();
     }
 
     @SubscribeEvent
@@ -166,6 +171,17 @@ public final class Thoridrop {
                 if (session.phase() == DropSession.Phase.REWARDS) {
                     broadcast("¡Cinco oleadas completadas! Los participantes pueden recoger su recompensa.");
                 }
+            }
+        }
+        if (session.phase() == DropSession.Phase.REWARDS && !chestOpen) {
+            if (chestOpeningTicks < 0) chestOpeningTicks = 0;
+            chestOpeningTicks++;
+            if (chestOpeningTicks == 5) setCrateOpeningStage(1);
+            if (chestOpeningTicks == 11) setCrateOpeningStage(2);
+            if (chestOpeningTicks == 17) {
+                setCrateOpeningStage(3);
+                chestOpen = true;
+                broadcast("¡Cofre abierto! Haz clic para recoger tu recompensa.");
             }
         }
         if (++locatorTicks % 20 != 0) return;
@@ -288,6 +304,19 @@ public final class Thoridrop {
         if (waveMobs.isEmpty()) broadcast("No safe enemy spawn locations. Use /thoridrop stop and try open terrain.");
     }
 
+    private void setCrateOpeningStage(int stage) {
+        if (dropLevel == null || dropPosition == null || session == null) return;
+        Block block = switch (session.rarity()) {
+            case COMMON -> stage == 1 ? DropBlocks.COMMON_OPENING1.get()
+                : stage == 2 ? DropBlocks.COMMON_OPENING2.get() : DropBlocks.COMMON_OPEN.get();
+            case RARE -> stage == 1 ? DropBlocks.RARE_OPENING1.get()
+                : stage == 2 ? DropBlocks.RARE_OPENING2.get() : DropBlocks.RARE_OPEN.get();
+            case LEGENDARY -> stage == 1 ? DropBlocks.LEGENDARY_OPENING1.get()
+                : stage == 2 ? DropBlocks.LEGENDARY_OPENING2.get() : DropBlocks.LEGENDARY_OPEN.get();
+        };
+        dropLevel.setBlockAndUpdate(dropPosition, block.defaultBlockState());
+    }
+
     @SubscribeEvent
     public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (session == null || dropPosition == null || dropLevel == null) return;
@@ -295,14 +324,7 @@ public final class Thoridrop {
         if (player.level() != dropLevel || !event.getPos().equals(dropPosition)) return;
         if (session.phase() == DropSession.Phase.REWARDS) {
             if (!chestOpen) {
-                Block opened = switch (session.rarity()) {
-                    case COMMON -> DropBlocks.COMMON_OPEN.get();
-                    case RARE -> DropBlocks.RARE_OPEN.get();
-                    case LEGENDARY -> DropBlocks.LEGENDARY_OPEN.get();
-                };
-                dropLevel.setBlockAndUpdate(dropPosition, opened.defaultBlockState());
-                chestOpen = true;
-                player.sendSystemMessage(Component.literal("¡Cofre abierto! Haz clic de nuevo para recoger tu recompensa."));
+                player.sendSystemMessage(Component.literal("El cofre se está abriendo..."));
                 event.setCanceled(true);
                 return;
             }
