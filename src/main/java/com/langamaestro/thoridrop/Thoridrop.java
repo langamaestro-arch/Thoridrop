@@ -507,6 +507,20 @@ public final class Thoridrop {
                 default -> new String[]{"ravager", "vindicator"};
             };
         };
+        // Nicktale boss types are resolved by registry ID, avoiding a hard compile-time dependency.
+        // If Nicktale is not installed, retain the original Thoridrop fifth-wave guardians.
+        if (wave == 5) {
+            String nicktaleBoss = switch (session.rarity()) {
+                case COMMON -> "black_knight";
+                case RARE -> "blueflame_elder";
+                case LEGENDARY -> "cinderhorn_demon";
+            };
+            var nicktaleId = net.minecraft.resources.Identifier.fromNamespaceAndPath("nicktaleepicdungeons", nicktaleBoss);
+            var bossType = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(nicktaleId);
+            if (bossType != null) {
+                mobIds = new String[]{nicktaleBoss};
+            }
+        }
         for (int i = 0; i < count; i++) {
             double angle = 2 * Math.PI * i / count;
             int x = dropPosition.getX() + (int)Math.round(Math.cos(angle) * 9);
@@ -514,7 +528,7 @@ public final class Thoridrop {
             BlockPos spawn = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, dropPosition.getY(), z));
             if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) continue;
             String mobId = mobIds[i % mobIds.length];
-            net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:" + mobId));
+            net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse((wave == 5 && (mobId.equals("black_knight") || mobId.equals("blueflame_elder") || mobId.equals("cinderhorn_demon")) ? "nicktaleepicdungeons:" : "minecraft:") + mobId));
             if (type == null) continue;
             net.minecraft.world.entity.Entity entity = type.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
