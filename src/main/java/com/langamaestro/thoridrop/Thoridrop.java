@@ -656,7 +656,7 @@ public final class Thoridrop {
         if(session==null || session.phase()!=DropSession.Phase.COMBAT || dropLevel==null) return;
         if(!waveMobs.contains(event.getEntity().getUUID())) return;
         if(event.getSource().getEntity() instanceof ServerPlayer player) {
-            session.recordDamage(player.getUUID(),event.getNewDamage());
+            session.recordDamage(player.getUUID(),event.getDamageContainer().getNewDamage());
         }
     }
     private void broadcast(String message) {
