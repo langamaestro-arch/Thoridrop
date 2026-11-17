@@ -526,11 +526,14 @@ public final class Thoridrop {
             int x = dropPosition.getX() + (int)Math.round(Math.cos(angle) * 9);
             int z = dropPosition.getZ() + (int)Math.round(Math.sin(angle) * 9);
             BlockPos spawn = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, dropPosition.getY(), z));
-            if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) continue;
+            if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) {
+                spawn = dropPosition.above(3);
+            }
             String mobId = mobIds[i % mobIds.length];
             net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse((wave == 5 && (mobId.equals("black_knight") || mobId.equals("blueflame_elder") || mobId.equals("cinderhorn_demon")) ? "nicktaleepicdungeons:" : "minecraft:") + mobId));
-            if (type == null) continue;
+            if (type == null) type = net.minecraft.world.entity.EntityType.RAVAGER;
             net.minecraft.world.entity.Entity entity = type.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
+            if (entity == null) entity = net.minecraft.world.entity.EntityType.RAVAGER.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
             if (wave == 5 && entity instanceof net.minecraft.world.entity.LivingEntity boss) {
@@ -543,6 +546,14 @@ public final class Thoridrop {
             }
             if (entity instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
+        }
+        if (waveMobs.isEmpty()) {
+            net.minecraft.world.entity.Entity fallback = net.minecraft.world.entity.EntityType.RAVAGER.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
+            if (fallback != null) {
+                fallback.setPos(dropPosition.getX() + 0.5, dropPosition.getY() + 2, dropPosition.getZ() + 0.5);
+                if (fallback instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
+                if (dropLevel.addFreshEntity(fallback)) waveMobs.add(fallback.getUUID());
+            }
         }
         waveTotal = waveMobs.size();
         session.setWaveEnemyCount(waveTotal);
