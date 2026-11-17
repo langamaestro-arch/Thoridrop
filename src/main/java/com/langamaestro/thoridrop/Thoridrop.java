@@ -299,6 +299,7 @@ public final class Thoridrop {
                     participants.add(player.getUUID());
                 }
             }
+            if (waveDelay == 0 && ++guardianAttackTicks % 20 == 0) directWaveEnemiesToPlayers();
             if (waveDelay > 0) {
                 waveDelay--;
                 if (waveDelay == 0) spawnWave();
@@ -482,6 +483,34 @@ public final class Thoridrop {
         beaconLightPosition = null;
     }
 
+    /**
+     * Keep wave mobs actively engaging nearby players. This makes standing on a pillar
+     * less effective when combined with ranged skeleton/pillager support in every wave.
+     * Never target creative/spectator players or players outside the event area.
+     */
+    private void directWaveEnemiesToPlayers() {
+        if (dropLevel == null || dropPosition == null || session == null) return;
+        for (UUID id : waveMobs) {
+            var entity = dropLevel.getEntity(id);
+            if (!(entity instanceof net.minecraft.world.entity.Mob mob) || !mob.isAlive()) continue;
+            ServerPlayer nearest = null;
+            double best = 28 * 28;
+            for (ServerPlayer player : dropLevel.players()) {
+                if (player.isCreative() || player.isSpectator()) continue;
+                if (player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5,
+                    dropPosition.getZ() + 0.5) > 32 * 32) continue;
+                double distance = mob.distanceToSqr(player);
+                if (distance < best) { best = distance; nearest = player; }
+            }
+            if (nearest != null) {
+                mob.setTarget(nearest);
+                if (session.wave() < 5 && mob.getNavigation().isDone()) {
+                    mob.getNavigation().moveTo(nearest, 1.15);
+                }
+            }
+        }
+    }
+
     /** Distinctive fifth-wave guardian ability: a periodic telegraphed area attack. */
     private void tickGuardianAbility() {
         if (++guardianAttackTicks % 100 != 0) return;
@@ -597,22 +626,22 @@ public final class Thoridrop {
         int count = wave == 5 ? 1 : 2 + wave + extra;
         String[] mobIds = switch (session.rarity()) {
             case COMMON -> switch (wave) {
-                case 1 -> new String[]{"zombie"};
+                case 1 -> new String[]{"zombie", "skeleton"};
                 case 2 -> new String[]{"zombie", "skeleton"};
                 case 3 -> new String[]{"skeleton", "spider"};
                 case 4 -> new String[]{"husk", "stray", "skeleton"};
                 default -> new String[]{"ravager"};
             };
             case RARE -> switch (wave) {
-                case 1 -> new String[]{"husk", "skeleton"};
+                case 1 -> new String[]{"husk", "skeleton", "pillager"};
                 case 2 -> new String[]{"pillager", "stray"};
-                case 3 -> new String[]{"vindicator", "witch"};
+                case 3 -> new String[]{"vindicator", "witch", "pillager"};
                 case 4 -> new String[]{"vindicator", "pillager"};
                 default -> new String[]{"ravager", "vindicator"};
             };
             case LEGENDARY -> switch (wave) {
                 case 1 -> new String[]{"vindicator", "pillager"};
-                case 2 -> new String[]{"witch", "vindicator"};
+                case 2 -> new String[]{"witch", "vindicator", "pillager"};
                 case 3 -> new String[]{"witch", "vindicator", "pillager"};
                 case 4 -> new String[]{"pillager", "evoker", "vindicator", "skeleton"};
                 default -> new String[]{"ravager", "vindicator"};
