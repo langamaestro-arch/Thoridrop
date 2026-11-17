@@ -208,7 +208,7 @@ public final class Thoridrop {
                     createDrop(target, rarity);
                     if (session != null) {
                         broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
-                        for (ServerPlayer online : server.getPlayerList().getPlayers()) online.playNotifySound(net.minecraft.sounds.SoundEvents.RAID_HORN, net.minecraft.sounds.SoundSource.MASTER, 0.8f, 1.0f);
+                        for (ServerPlayer online : server.getPlayerList().getPlayers()) online.level().playSound(null, online.blockPosition(), net.minecraft.sounds.SoundEvents.RAID_HORN.value(), net.minecraft.sounds.SoundSource.MASTER, 0.8f, 1.0f);
                     }
                 }
             }
@@ -505,7 +505,7 @@ public final class Thoridrop {
                 }
             }
             player.sendSystemMessage(Component.literal("Thoridrop: personal rewards delivered!"));
-            player.playNotifySound(net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
+            player.level().playSound(null, player.blockPosition(), net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
         }
     }
 
