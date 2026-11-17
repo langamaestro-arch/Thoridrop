@@ -216,7 +216,7 @@ public final class Thoridrop {
             return;
         }
         if (session.phase() == DropSession.Phase.COMBAT) {
-            if (session.wave() == 5 && waveDelay == 0 && !waveMobs.isEmpty()) tickGuardianAbility();
+            if (session.wave() == 5 && session.rarity() == DropSession.Rarity.LEGENDARY && waveDelay == 0 && !waveMobs.isEmpty()) tickGuardianAbility();
             for (ServerPlayer player : dropLevel.players()) {
                 if (player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5, dropPosition.getZ() + 0.5) <= 24 * 24) {
                     participants.add(player.getUUID());
@@ -512,8 +512,8 @@ public final class Thoridrop {
         if (wave == 5) {
             String[] pool = switch (session.rarity()) {
                 case COMMON -> new String[]{"mutant_zombie", "violet_flying_witch",
-                    "fortress_guard", "vix_eclipse_fox", "gravebreaker_brute", "don_cascabel"};
-                case RARE -> new String[]{"abyssal_shagbeast"};
+                    "fortress_guard", "vix_eclipse_fox"};
+                case RARE -> new String[]{"abyssal_shagbeast", "gravebreaker_brute", "don_cascabel", "blueflame_elder", "buried_axe_knight", "voidborne_lich"};
                 case LEGENDARY -> new String[]{"black_knight", "cinderhorn_demon",
                     "runebound_colossus", "armored_skeleton", "widow_of_the_well",
                     "sultan_eternal_sands", "eclipse_colossus", "cerberus"};
@@ -565,8 +565,8 @@ public final class Thoridrop {
                         mobBoss.setHealth((float) targetHp);
                     }
                 }
-                boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
-                boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
+                if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 20 * 60 * 10, 1));
+                if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, 1));
                 if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 60 * 10, 0));
                 boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 20 * 60 * 10, 0));
             }
