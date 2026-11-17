@@ -339,6 +339,7 @@ public final class Thoridrop {
         if (session.phase() == DropSession.Phase.COMBAT && session.wave() == 5 && !waveMobs.isEmpty()) {
             net.minecraft.world.entity.Entity guardian = dropLevel.getEntity(waveMobs.iterator().next());
             if (guardian instanceof net.minecraft.world.entity.LivingEntity living && living.isAlive()) {
+                hideNicktaleBossBars(living);
                 eventBar.setProgress(Math.max(0.0f, Math.min(1.0f, living.getHealth() / living.getMaxHealth())));
                 eventBar.setName(Component.literal("✦ THORIDROP  " + rarityName(session.rarity())
                     + "  ◆  GUARDIÁN " + Math.round(living.getHealth()) + "/" + Math.round(living.getMaxHealth()) + " HP")
@@ -426,6 +427,25 @@ public final class Thoridrop {
                 }
                 player.sendSystemMessage(Component.literal("¡El Guardián libera una onda de energía!"));
             }
+        }
+    }
+
+    // Nicktale owns its boss bars. Hide only the bar fields of the active Thoridrop guardian,
+    // leaving all other dungeon encounters and their bars untouched.
+    private void hideNicktaleBossBars(net.minecraft.world.entity.LivingEntity guardian) {
+        Class<?> current = guardian.getClass();
+        while (current != null && current != Object.class) {
+            for (java.lang.reflect.Field field : current.getDeclaredFields()) {
+                if (!net.minecraft.server.level.ServerBossEvent.class.isAssignableFrom(field.getType())) continue;
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(guardian);
+                    if (value instanceof net.minecraft.server.level.ServerBossEvent bar) bar.setVisible(false);
+                } catch (ReflectiveOperationException | RuntimeException ex) {
+                    LOGGER.debug("Cannot hide external boss bar for {}", guardian.getType(), ex);
+                }
+            }
+            current = current.getSuperclass();
         }
     }
 
