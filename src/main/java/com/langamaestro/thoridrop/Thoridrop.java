@@ -336,6 +336,16 @@ public final class Thoridrop {
             .append(Component.literal(state).withStyle(session.phase() == DropSession.Phase.REWARDS
                 ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD))
             );
+        if (session.phase() == DropSession.Phase.COMBAT && session.wave() == 5 && !waveMobs.isEmpty()) {
+            net.minecraft.world.entity.Entity guardian = dropLevel.getEntity(waveMobs.iterator().next());
+            if (guardian instanceof net.minecraft.world.entity.LivingEntity living && living.isAlive()) {
+                eventBar.setProgress(Math.max(0.0f, Math.min(1.0f, living.getHealth() / living.getMaxHealth())));
+                eventBar.setName(Component.literal("✦ THORIDROP  " + rarityName(session.rarity())
+                    + "  ◆  GUARDIÁN " + Math.round(living.getHealth()) + "/" + Math.round(living.getMaxHealth()) + " HP")
+                    .withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
+                return;
+            }
+        }
         eventBar.setProgress(session.phase() == DropSession.Phase.COMBAT && waveTotal > 0
             ? Math.max(0.0f, Math.min(1.0f, (float) waveMobs.size() / waveTotal)) : 1.0f);
     }
@@ -503,7 +513,7 @@ public final class Thoridrop {
                 case 1 -> new String[]{"vindicator", "pillager"};
                 case 2 -> new String[]{"witch", "vindicator"};
                 case 3 -> new String[]{"witch", "vindicator"};
-                case 4 -> new String[]{"piglin_brute", "evoker"};
+                case 4 -> new String[]{"pillager", "evoker", "vindicator"};
                 default -> new String[]{"ravager", "vindicator"};
             };
         };
@@ -549,6 +559,15 @@ public final class Thoridrop {
             if (entity == null) entity = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
+            if (wave < 5 && entity instanceof net.minecraft.world.entity.Mob ranged) {
+                if (mobId.equals("minecraft:skeleton") || mobId.equals("minecraft:stray")) {
+                    ranged.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BOW));
+                } else if (mobId.equals("minecraft:pillager")) {
+                    ranged.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CROSSBOW));
+                }
+            }
             if (wave == 5 && entity instanceof net.minecraft.world.entity.LivingEntity boss) {
                 boss.setCustomName(Component.literal("✦ GUARDIÁN " + rarityName(session.rarity()) + " ✦").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
                 boss.setCustomNameVisible(true);
