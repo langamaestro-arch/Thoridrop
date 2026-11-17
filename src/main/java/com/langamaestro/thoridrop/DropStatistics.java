@@ -40,6 +40,46 @@ public final class DropStatistics {
         }
         return ids.isEmpty() ? "Todavía no hay resultados en el ranking." : s.toString();
     }
+    /** Ranked player rows, encoded without protocol newlines. */
+    public static synchronized String rankingPage(String field,int page,int size) {
+        java.util.Set<UUID> ids=new java.util.HashSet<>();
+        for(String key:DATA.stringPropertyNames()) if(key.endsWith("."+field)) {
+            try {ids.add(UUID.fromString(key.substring(0,key.length()-field.length()-1)));}
+            catch(IllegalArgumentException ignored){}
+        }
+        java.util.List<UUID> ordered=new java.util.ArrayList<>(ids);
+        ordered.sort(java.util.Comparator.comparingInt((UUID p)->count(p,field)).reversed()
+            .thenComparing(p->DATA.getProperty(p+".name",p.toString())));
+        int begin=Math.max(0,page)*size;
+        if(begin>=ordered.size())return "Sin jugadores registrados";
+        StringBuilder text=new StringBuilder();
+        for(int i=begin;i<Math.min(ordered.size(),begin+size);i++) {
+            UUID id=ordered.get(i);
+            if(i>begin)text.append(" | ");
+            text.append(i+1).append(". ")
+                .append(DATA.getProperty(id+".name",id.toString().substring(0,8)))
+                .append(": ").append(count(id,field));
+        }
+        return text.toString();
+    }
+    /** Retain only the last five completed challenges per player. */
+    public static synchronized void recordHistory(UUID id,String tier,int seconds,
+           int hits,int kills,int players,boolean flawless) {
+        String current=DATA.getProperty(id+".history","");
+        String now=java.time.LocalDate.now().toString()+" "+tier+" "+seconds+"s"
+            +" "+kills+" bajas "+hits+" impactos "+players+" jugadores"
+            +(flawless?" sin morir":"");
+        java.util.List<String> records=new java.util.ArrayList<>();
+        records.add(now);
+        for(String record:current.split("\\|",-1)) {
+            if(!record.isBlank() && records.size()<5)records.add(record);
+        }
+        DATA.setProperty(id+".history",String.join("|",records));
+        save();
+    }
+    public static synchronized String history(UUID id) {
+        return DATA.getProperty(id+".history","Sin desafíos registrados");
+    }
     private static void save() {
         try {
             Path tmp=FILE.resolveSibling(FILE.getFileName()+".tmp");
