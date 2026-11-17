@@ -49,6 +49,37 @@ public final class DropStatistics {
             catch(AtomicMoveNotSupportedException e){Files.move(tmp,FILE,StandardCopyOption.REPLACE_EXISTING);}
         }catch(Exception e){throw new IllegalStateException("Cannot save Thoridrop statistics",e);}
     }
+    /** Update a personal best in ticks; smaller values are better. */
+    public static synchronized boolean bestTime(UUID id, int ticks) {
+        if (ticks < 1) return false;
+        int previous = count(id, "best_ticks");
+        if (previous != 0 && previous <= ticks) return false;
+        DATA.setProperty(id + ".best_ticks", Integer.toString(ticks));
+        save();
+        return true;
+    }
+    public static synchronized int addAndGet(UUID id, String field, int value) {
+        if (value < 0) throw new IllegalArgumentException("Negative statistic");
+        int next = Math.addExact(count(id, field), value);
+        DATA.setProperty(id+"."+field,Integer.toString(next));
+        save();
+        return next;
+    }
+    public static synchronized int streak(UUID id, boolean won) {
+        int next = won ? count(id,"streak") + 1 : 0;
+        DATA.setProperty(id+".streak",Integer.toString(next));
+        if (next > count(id,"best_streak")) DATA.setProperty(id+".best_streak",Integer.toString(next));
+        save();
+        return next;
+    }
+    public static synchronized String detailed(UUID id) {
+        int ticks = count(id,"best_ticks");
+        return summary(id) + " | Enemigos derrotados: "+count(id,"kills")
+            + " | Impactos: "+count(id,"hits") + " | Racha: "+count(id,"streak")
+            + " (máxima "+count(id,"best_streak")+")"
+            + " | Mejor tiempo: "+(ticks==0 ? "sin récord" : (ticks/20)+"s")
+            + " | Victorias cooperativas: "+count(id,"team_wins");
+    }
     public static synchronized void add(UUID id,String field) {
         DATA.setProperty(id+"."+field,Integer.toString(count(id,field)+1));
         save();
