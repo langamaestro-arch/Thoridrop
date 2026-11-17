@@ -26,6 +26,8 @@ import java.util.UUID;
 public final class Thoridrop {
     public static final String MOD_ID = "thoridrop";
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static Thoridrop INSTANCE;
+    public static Thoridrop instance() {return INSTANCE;}
 
     private ServerLevel dropLevel;
     private BlockPos dropPosition;
@@ -186,6 +188,8 @@ public final class Thoridrop {
     private final java.util.Set<UUID> claimedRewards = new java.util.HashSet<>();
 
     public Thoridrop(IEventBus modBus) {
+        INSTANCE=this;
+        modBus.addListener(ThoridropMenuNetwork::register);
         DropBlocks.register(modBus);
         DropItems.register(modBus);
         NeoForge.EVENT_BUS.register(this);
@@ -872,6 +876,17 @@ public final class Thoridrop {
         if(dropLevel==null) return;
         ServerPlayer p=dropLevel.getServer().getPlayerList().getPlayer(id);
         if(p!=null) p.sendSystemMessage(Component.literal("§6✦ LOGRO THORIDROP: §e"+achievement));
+    }
+
+    /** Numeric whitelist shared by the graphical market; never trust a client-supplied price. */
+    void menuPurchase(ServerPlayer player, int action) {
+        switch(action) {
+            case 1 -> buyShopItem(player,"hierro",15);
+            case 2 -> buyShopItem(player,"diamantes",60);
+            case 3 -> buyShopItem(player,"manzanas",85);
+            case 4 -> buyShopItem(player,"arma",250);
+            default -> { }
+        }
     }
 
     private int buyShopItem(ServerPlayer player, String sku, int cost) {
