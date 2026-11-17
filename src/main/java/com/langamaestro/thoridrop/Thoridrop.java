@@ -50,6 +50,15 @@ public final class Thoridrop {
     private final java.util.Set<UUID> eventDeaths = new java.util.HashSet<>();
     private final java.util.Map<UUID,Integer> playerOutOfRangeTicks = new java.util.HashMap<>();
     private int abandonSeconds = 180;
+    private int combatTicks;
+    private int timedChallengeSeconds = 480;
+    private int shopPointsNormal = 20, shopPointsMythic = 55, shopPointsLegendary = 130;
+    private int cooperativeBonusPoints = 15;
+    private int specialBonusPoints = 30;
+    private final java.util.Map<UUID,Integer> eventHits = new java.util.HashMap<>();
+    private final java.util.Map<UUID,Integer> eventKills = new java.util.HashMap<>();
+    private boolean timedChallengeSucceeded;
+    private int teamSizeAtVictory;
     private long intervalTicks = 72000L;
     private int spawnDistanceBlocks = 160;
     private int arrivalTimeoutTicks = 6000;
@@ -85,6 +94,12 @@ public final class Thoridrop {
         props.setProperty("flawless_bonus_diamonds", "2");
         props.setProperty("random_modifier_chance_percent", "25");
         props.setProperty("abandon_timeout_seconds", "180");
+        props.setProperty("timed_challenge_seconds", "480");
+        props.setProperty("points_normal", "20");
+        props.setProperty("points_mythic", "55");
+        props.setProperty("points_legendary", "130");
+        props.setProperty("points_cooperative_bonus", "15");
+        props.setProperty("points_special_bonus", "30");
         try {
             java.nio.file.Files.createDirectories(path.getParent());
             if (java.nio.file.Files.exists(path)) {
@@ -111,12 +126,19 @@ public final class Thoridrop {
             flawlessDiamondBonus = Math.max(0, Math.min(32, Integer.parseInt(props.getProperty("flawless_bonus_diamonds", "2"))));
             randomModifierChance = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("random_modifier_chance_percent", "25"))));
             abandonSeconds = Math.max(30, Math.min(3600, Integer.parseInt(props.getProperty("abandon_timeout_seconds", "180"))));
+            timedChallengeSeconds = Math.max(60, Math.min(3600, Integer.parseInt(props.getProperty("timed_challenge_seconds","480"))));
+            shopPointsNormal = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_normal","20"))));
+            shopPointsMythic = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_mythic","55"))));
+            shopPointsLegendary = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_legendary","130"))));
+            cooperativeBonusPoints = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_cooperative_bonus","15"))));
+            specialBonusPoints = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_special_bonus","30"))));
             try (var output = java.nio.file.Files.newOutputStream(path)) {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
         } catch (Exception ex) { LOGGER.error("Thoridrop config load failed", ex); }
         RewardManager.load();
         DropStatistics.load();
+        DropPoints.load();
         configLoaded = true;
     }
 
@@ -185,6 +207,39 @@ public final class Thoridrop {
                 .executes(context -> { context.getSource().sendSuccess(() -> Component.literal(DropStatistics.leaderboard("wins", 10)), false); return 1; })
                 .then(Commands.literal("legendario").executes(context -> { context.getSource().sendSuccess(() -> Component.literal(DropStatistics.leaderboard("wins_legendary", 10)), false); return 1; }))
                 .then(Commands.literal("sinmorir").executes(context -> { context.getSource().sendSuccess(() -> Component.literal(DropStatistics.leaderboard("flawless", 10)), false); return 1; })))
+            .then(Commands.literal("records")
+                .executes(context -> {
+                    ServerPlayer player=context.getSource().getPlayerOrException();
+                    player.sendSystemMessage(Component.literal(DropStatistics.detailed(player.getUUID())));
+                    return 1;
+                }))
+            .then(Commands.literal("logros")
+                .executes(context -> {
+                    ServerPlayer player=context.getSource().getPlayerOrException();
+                    int wins=DropStatistics.value(player.getUUID(),"wins");
+                    int flawless=DropStatistics.value(player.getUUID(),"flawless");
+                    int legendary=DropStatistics.value(player.getUUID(),"wins_legendary");
+                    int teams=DropStatistics.value(player.getUUID(),"team_wins");
+                    player.sendSystemMessage(Component.literal("§6✦ LOGROS THORIDROP§r | Desafíos: "+wins+"/10, /25, /50, /100"
+                        +" | Legendarios: "+legendary+"/1 | Sin morir: "+flawless+"/1 | Cooperativos: "+teams+"/1"));
+                    return 1;
+                }))
+            .then(Commands.literal("puntos")
+                .executes(context -> {
+                    ServerPlayer player=context.getSource().getPlayerOrException();
+                    player.sendSystemMessage(Component.literal("§6✦ THORIDROP§r Saldo: "+DropPoints.balance(player.getUUID())+" puntos."));
+                    return 1;
+                }))
+            .then(Commands.literal("tienda")
+                .executes(context -> {
+                    context.getSource().sendSuccess(() -> Component.literal("§6Tienda Thoridrop§r | hierro: 15 | diamantes: 60 | manzanas: 85 | arma: 250. Compra: /thoridrop tienda comprar <objeto>"), false);
+                    return 1;
+                })
+                .then(Commands.literal("comprar")
+                    .then(Commands.literal("hierro").executes(context -> buyShopItem(context.getSource().getPlayerOrException(),"hierro",15)))
+                    .then(Commands.literal("diamantes").executes(context -> buyShopItem(context.getSource().getPlayerOrException(),"diamantes",60)))
+                    .then(Commands.literal("manzanas").executes(context -> buyShopItem(context.getSource().getPlayerOrException(),"manzanas",85)))
+                    .then(Commands.literal("arma").executes(context -> buyShopItem(context.getSource().getPlayerOrException(),"arma",250)))))
             .then(Commands.literal("status")
                 .executes(context -> {
                     String message = session == null
@@ -289,7 +344,7 @@ public final class Thoridrop {
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         specialEvent = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < specialEventChance;
         modifierType = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < randomModifierChance
-            ? 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(3) : 0;
+            ? 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(6) : 0;
         availableTicks = 0;
         guardianDisplayName = "GUARDIÁN";
         clearHud();
@@ -306,6 +361,11 @@ public final class Thoridrop {
         participants.clear();
         completedStats.clear();
         eventDeaths.clear();
+        eventHits.clear();
+        eventKills.clear();
+        combatTicks = 0;
+        timedChallengeSucceeded = false;
+        teamSizeAtVictory = 0;
         playerOutOfRangeTicks.clear();
         rewardTicks = 0;
         waveTotal = 0;
@@ -315,7 +375,9 @@ public final class Thoridrop {
         chestOpeningTicks = -1;
         DropStatistics.remember(player.getUUID(), player.getGameProfile().name());
         DropStatistics.add(player.getUUID(), "events_started");
-        if(modifierType != 0) broadcast("✦ Modificador del desafío: " + switch(modifierType) { case 1 -> "HORDA ENEMIGA"; case 2 -> "ENEMIGOS VELOCES"; default -> "BOTÍN EXTRA"; });
+        if(modifierType != 0) broadcast("✦ Modificador del desafío: " + switch(modifierType) { case 1 -> "HORDA ENEMIGA"; case 2 -> "ENEMIGOS VELOCES";
+            case 3 -> "BOTÍN EXTRA"; case 4 -> "ENEMIGOS ÉLITE";
+            case 5 -> "CONTRARRELOJ"; default -> "OLEADA SORPRESA"; });
         DropStatistics.add(player.getUUID(), "started_" + rarity.name().toLowerCase(java.util.Locale.ROOT));
         player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
         if (specialEvent) broadcast("¡SUMINISTRO EXTRAORDINARIO! Recompensas adicionales al completar el evento.");
@@ -412,6 +474,7 @@ public final class Thoridrop {
             return;
         }
         if (session.phase() == DropSession.Phase.COMBAT) {
+            combatTicks++;
             if (session.wave() == 5 && session.rarity() == DropSession.Rarity.LEGENDARY && waveDelay == 0 && !waveMobs.isEmpty()) tickGuardianAbility();
             for (ServerPlayer player : dropLevel.players()) {
                 if ((multiplayerEnabled || participants.isEmpty() || participants.contains(player.getUUID()))
@@ -459,8 +522,24 @@ public final class Thoridrop {
                     }
                 }
                 if (session.phase() == DropSession.Phase.REWARDS) {
+                    teamSizeAtVictory = participants.size();
+                    timedChallengeSucceeded = modifierType == 5 && combatTicks <= timedChallengeSeconds * 20;
                     for (UUID id : participants) if (completedStats.add(id)) {
                         DropStatistics.add(id, "wins");
+                        DropStatistics.bestTime(id, combatTicks);
+                        DropStatistics.streak(id,true);
+                        if(teamSizeAtVictory >= 2) DropStatistics.add(id,"team_wins");
+                        if(timedChallengeSucceeded) DropStatistics.add(id,"timed_wins");
+                        if(specialEvent) DropStatistics.add(id,"special_wins");
+                        int victories=DropStatistics.value(id,"wins");
+                        if(victories==10 || victories==25 || victories==50 || victories==100)
+                            awardAchievement(id,"Veterano Thoridrop: "+victories+" victorias");
+                        if(session.rarity()==DropSession.Rarity.LEGENDARY && DropStatistics.value(id,"wins_legendary")==0)
+                            awardAchievement(id,"Conquistador legendario");
+                        if(teamSizeAtVictory>=2 && DropStatistics.value(id,"team_wins")==1)
+                            awardAchievement(id,"Victoria en equipo");
+                        if(!eventDeaths.contains(id) && DropStatistics.value(id,"flawless")==0)
+                            awardAchievement(id,"Superviviente impecable");
                         if(!eventDeaths.contains(id)) DropStatistics.add(id,"flawless");
                         DropStatistics.add(id, "wins_" + session.rarity().name().toLowerCase(java.util.Locale.ROOT));
                     }
@@ -784,6 +863,41 @@ public final class Thoridrop {
         locatorBars.clear();
     }
 
+    private void awardAchievement(UUID id, String achievement) {
+        if(dropLevel==null) return;
+        ServerPlayer p=dropLevel.getServer().getPlayerList().getPlayer(id);
+        if(p!=null) p.sendSystemMessage(Component.literal("§6✦ LOGRO THORIDROP: §e"+achievement));
+    }
+
+    private int buyShopItem(ServerPlayer player, String sku, int cost) {
+        if(!configLoaded) loadConfig();
+        if(DropPoints.balance(player.getUUID()) < cost) {
+            player.sendSystemMessage(Component.literal("Thoridrop: necesitas "+cost+" puntos. Tienes "+DropPoints.balance(player.getUUID())+"."));
+            return 0;
+        }
+        net.minecraft.world.item.ItemStack prize = switch(sku) {
+            case "hierro" -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 16);
+            case "diamantes" -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5);
+            case "manzanas" -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4);
+            case "arma" -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.NETHERITE_SWORD);
+            default -> net.minecraft.world.item.ItemStack.EMPTY;
+        };
+        if(prize.isEmpty()) return 0;
+        if(sku.equals("arma")) {
+            prize = net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
+                player.getRandom(), prize, 37, player.level().registryAccess(), java.util.Optional.empty());
+            prize.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                Component.literal("§6Espada del Guardián Thoridrop"));
+        }
+        if(!DropPoints.spend(player.getUUID(),cost)) return 0;
+        if(!player.getInventory().add(prize) && !prize.isEmpty()) {
+            player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                player.level(),player.getX(),player.getY(),player.getZ(),prize));
+        }
+        player.sendSystemMessage(Component.literal("§6Tienda Thoridrop§r Comprado: "+sku+" (-"+cost+" puntos)."));
+        return 1;
+    }
+
     private void grantRewards(ServerPlayer player) {
         RewardManager.give(player,session.rarity());
         if (specialEvent) {
@@ -806,6 +920,8 @@ public final class Thoridrop {
         if(!waveMobs.contains(event.getEntity().getUUID())) return;
         if(event.getSource().getEntity() instanceof ServerPlayer player) {
             session.recordDamage(player.getUUID(),1.0);
+            eventHits.merge(player.getUUID(), 1, Integer::sum);
+            DropStatistics.add(player.getUUID(),"hits");
         }
     }
     private void broadcast(String message) {
@@ -828,6 +944,7 @@ public final class Thoridrop {
             int additional = Math.min(maxAdditionalMobs, Math.max(0, participants.size()-1) * extraMobsPerPlayer);
             count += additional;
             if (modifierType == 1) count += Math.max(2, count / 2);
+            if (modifierType == 6 && wave == 4) count += 5;
             count = Math.min(50, count);
         }
         String[] mobIds = switch (session.rarity()) {
@@ -915,6 +1032,11 @@ public final class Thoridrop {
             if (entity == null) entity = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
+            if (wave < 5 && modifierType == 4 && entity instanceof net.minecraft.world.entity.Mob elite) {
+                elite.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_HELMET));
+                elite.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_CHESTPLATE));
+                elite.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE,20*1200,0));
+            }
             if (wave < 5 && modifierType == 2 && entity instanceof net.minecraft.world.entity.LivingEntity fast) {
                 fast.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 1200, 0));
             }
@@ -981,7 +1103,16 @@ public final class Thoridrop {
 
     @SubscribeEvent
     public void onPlayerDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !fightingNearDrop(player)) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            if (session != null && session.phase()==DropSession.Phase.COMBAT
+                && waveMobs.contains(event.getEntity().getUUID())
+                && event.getSource().getEntity() instanceof ServerPlayer killer) {
+                eventKills.merge(killer.getUUID(),1,Integer::sum);
+                DropStatistics.add(killer.getUUID(),"kills");
+            }
+            return;
+        }
+        if (!fightingNearDrop(player)) return;
         if (!preserveInventoryOnEventDeath) {
             DropStatistics.add(player.getUUID(), "deaths");
             eventDeaths.add(player.getUUID());
@@ -1042,6 +1173,16 @@ public final class Thoridrop {
                 claimedRewards.add(player.getUUID());
                 grantRewards(player);
                 DropStatistics.add(player.getUUID(), "claims");
+                int earned = switch(session.rarity()) { case COMMON -> shopPointsNormal; case RARE -> shopPointsMythic; case LEGENDARY -> shopPointsLegendary; };
+                if(teamSizeAtVictory >= 2) earned += cooperativeBonusPoints;
+                if(specialEvent) earned += specialBonusPoints;
+                if(timedChallengeSucceeded) earned += 25;
+                DropPoints.earn(player.getUUID(),earned);
+                player.sendSystemMessage(Component.literal("§6+ "+earned+" puntos Thoridrop§r | Saldo: "+DropPoints.balance(player.getUUID())));
+                int damage = eventHits.getOrDefault(player.getUUID(),0);
+                int best = eventHits.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+                if(teamSizeAtVictory >= 2 && damage == best && best > 0)
+                    player.sendSystemMessage(Component.literal("✦ Mayor contribución del equipo: "+damage+" impactos."));
                 if(!eventDeaths.contains(player.getUUID()) && flawlessDiamondBonus > 0) {
                     int bonus = flawlessDiamondBonus + (modifierType == 3 ? 2 : 0);
                     var prize = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, bonus);
