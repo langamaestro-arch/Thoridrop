@@ -22,7 +22,7 @@ public final class ThoridropShop {
         new Offer(6,"Herramientas","Pico de diamante",125,Items.DIAMOND_PICKAXE,1,30),
         new Offer(7,"Armas","Arco mítico",190,Items.BOW,1,36),
         new Offer(8,"Armaduras","Casco de netherita",280,Items.NETHERITE_HELMET,1,42),
-        new Offer(9,"Consumibles","Pociones curativas x3",95,Items.POTION,3,0),
+        new Offer(9,"Consumibles","Zanahorias doradas x12",95,Items.GOLDEN_CARROT,12,0),
         new Offer(10,"Materiales","Esmeraldas x12",55,Items.EMERALD,12,0),
         new Offer(11,"Herramientas","Hacha legendaria",245,Items.NETHERITE_AXE,1,40),
         new Offer(12,"Consumibles","Flechas x64",35,Items.ARROW,64,0)
