@@ -42,7 +42,9 @@ public final class ThoridropHud {
         }
 
         String detail;
-        if (raw.contains("OLEADA")) {
+        if (raw.contains(" HP") && raw.contains("◆")) {
+            detail = raw.substring(raw.indexOf("◆") + 1).trim();
+        } else if (raw.contains("OLEADA")) {
             detail = raw.substring(raw.indexOf("OLEADA")).replace("  •  ", "  ✦  ");
         } else if (raw.contains("RECOMPENSAS")) {
             detail = "RECOMPENSAS DESBLOQUEADAS  ✦  ABRE EL COFRE";
@@ -50,7 +52,8 @@ public final class ThoridropHud {
             String distance = raw.replaceAll(".*?(\\d+)m.*", "$1");
             String direction = raw.contains("OBJETIVO ENFRENTE") ? "◆ OBJETIVO ENFRENTE ◆"
                     : raw.contains("DERECHA") ? "▶ DERECHA" : "IZQUIERDA ◀";
-            detail = distance + "m  ✦  " + direction;
+            String remaining = raw.contains("⏳") ? raw.substring(raw.indexOf("⏳")).replaceAll("[^0-9s⏳]", "").trim() : "";
+            detail = distance + "m  ✦  " + direction + (remaining.isEmpty() ? "" : "  " + remaining);
         } else {
             detail = "SUMINISTROS  ✦  PREPARATE";
         }
