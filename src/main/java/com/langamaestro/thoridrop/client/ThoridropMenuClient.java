@@ -44,7 +44,7 @@ public final class ThoridropMenuClient {
             if(mc.gui.screen() instanceof ThoridropMenuScreen) {
                 mc.gui.setScreen(null);
             } else if(mc.gui.screen() == null) {
-                mc.setScreen(new ThoridropMenuScreen());
+                mc.gui.setScreen(new ThoridropMenuScreen());
                 ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(0));
             }
         }
