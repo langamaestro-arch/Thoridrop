@@ -7,8 +7,8 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 public final class DropItems {
     private static final DeferredRegister.Items ITEMS=DeferredRegister.createItems(Thoridrop.MOD_ID);
-    public static final DeferredItem<Item> SUPPLY_FRAGMENT=ITEMS.registerSimpleItem("supply_fragment",new Item.Properties());
-    public static final DeferredItem<Item> VICTORY_TROPHY=ITEMS.registerSimpleItem("victory_trophy",new Item.Properties().stacksTo(16));
+    public static final DeferredItem<Item> SUPPLY_FRAGMENT=ITEMS.registerSimpleItem("supply_fragment");
+    public static final DeferredItem<Item> VICTORY_TROPHY=ITEMS.registerSimpleItem("victory_trophy");
     private DropItems(){}
     public static void register(IEventBus bus){ITEMS.register(bus);}
 }
