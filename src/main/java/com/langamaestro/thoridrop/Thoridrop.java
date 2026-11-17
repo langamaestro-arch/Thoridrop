@@ -765,8 +765,30 @@ public final class Thoridrop {
             int x = dropPosition.getX() + (int)Math.round(Math.cos(angle) * 9);
             int z = dropPosition.getZ() + (int)Math.round(Math.sin(angle) * 9);
             BlockPos spawn = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, dropPosition.getY(), z));
-            if (!dropLevel.getBlockState(spawn).isAir() || !dropLevel.getBlockState(spawn.above()).isAir()) {
-                spawn = dropPosition.above(3);
+            // Never spawn an enemy on or immediately beside the supply crate.
+            // Search around the ring instead of falling back onto the crate itself.
+            boolean validSpawn = false;
+            for (int attempt = 0; attempt < 24; attempt++) {
+                double candidateAngle = angle + attempt * (Math.PI * 2.0 / 24.0);
+                int radius = 10 + attempt / 8 * 3;
+                int candidateX = dropPosition.getX() + (int)Math.round(Math.cos(candidateAngle) * radius);
+                int candidateZ = dropPosition.getZ() + (int)Math.round(Math.sin(candidateAngle) * radius);
+                BlockPos candidate = dropLevel.getHeightmapPos(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    new BlockPos(candidateX, dropPosition.getY(), candidateZ));
+                if (Math.abs(candidate.getX() - dropPosition.getX()) < 8
+                    && Math.abs(candidate.getZ() - dropPosition.getZ()) < 8) continue;
+                if (!dropLevel.getBlockState(candidate).isAir()
+                    || !dropLevel.getBlockState(candidate.above()).isAir()
+                    || !dropLevel.getBlockState(candidate.above(2)).isAir()) continue;
+                if (!dropLevel.getBlockState(candidate.below()).isSolidRender()) continue;
+                spawn = candidate;
+                validSpawn = true;
+                break;
+            }
+            if (!validSpawn) {
+                LOGGER.warn("Thoridrop: no valid spawn away from crate for enemy {}", i);
+                continue;
             }
             String mobId = mobIds[i % mobIds.length];
             net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse(mobId));
