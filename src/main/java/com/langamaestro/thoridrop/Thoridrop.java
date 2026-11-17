@@ -55,6 +55,7 @@ public final class Thoridrop {
     private int shopPointsNormal = 20, shopPointsMythic = 55, shopPointsLegendary = 130;
     private int cooperativeBonusPoints = 15;
     private int specialBonusPoints = 30;
+    private int exclusiveGearChanceMythic = 20, exclusiveGearChanceLegendary = 45;
     private final java.util.Map<UUID,Integer> eventHits = new java.util.HashMap<>();
     private final java.util.Map<UUID,Integer> eventKills = new java.util.HashMap<>();
     private boolean timedChallengeSucceeded;
@@ -100,6 +101,8 @@ public final class Thoridrop {
         props.setProperty("points_legendary", "130");
         props.setProperty("points_cooperative_bonus", "15");
         props.setProperty("points_special_bonus", "30");
+        props.setProperty("exclusive_gear_chance_mythic", "20");
+        props.setProperty("exclusive_gear_chance_legendary", "45");
         try {
             java.nio.file.Files.createDirectories(path.getParent());
             if (java.nio.file.Files.exists(path)) {
@@ -132,6 +135,8 @@ public final class Thoridrop {
             shopPointsLegendary = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_legendary","130"))));
             cooperativeBonusPoints = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_cooperative_bonus","15"))));
             specialBonusPoints = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_special_bonus","30"))));
+            exclusiveGearChanceMythic = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("exclusive_gear_chance_mythic","20"))));
+            exclusiveGearChanceLegendary = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("exclusive_gear_chance_legendary","45"))));
             try (var output = java.nio.file.Files.newOutputStream(path)) {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
@@ -900,6 +905,27 @@ public final class Thoridrop {
 
     private void grantRewards(ServerPlayer player) {
         RewardManager.give(player,session.rarity());
+        // A separate, named enchanted piece is an additional reward, never a replacement
+        // for the working personal-loot configuration.
+        int chance = switch(session.rarity()) {
+            case COMMON -> 0;
+            case RARE -> exclusiveGearChanceMythic;
+            case LEGENDARY -> exclusiveGearChanceLegendary;
+        };
+        if (player.getRandom().nextInt(100) < chance) {
+            boolean legendary = session.rarity() == DropSession.Rarity.LEGENDARY;
+            var item = legendary ? net.minecraft.world.item.Items.NETHERITE_AXE : net.minecraft.world.item.Items.DIAMOND_AXE;
+            var exclusive = new net.minecraft.world.item.ItemStack(item);
+            exclusive = net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
+                player.getRandom(), exclusive, legendary ? 50 : 28,
+                player.level().registryAccess(), java.util.Optional.empty());
+            exclusive.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                Component.literal(legendary ? "§6✦ Hacha legendaria Thoridrop" : "§d✦ Hacha mítica Thoridrop"));
+            if(!player.getInventory().add(exclusive) && !exclusive.isEmpty())
+                player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                    player.level(),player.getX(),player.getY(),player.getZ(),exclusive));
+            player.sendSystemMessage(Component.literal("§6✦ ¡Recompensa exclusiva de Thoridrop!"));
+        }
         if (specialEvent) {
             int bonus = switch (session.rarity()) {case COMMON -> 2; case RARE -> 4; case LEGENDARY -> 8;};
             net.minecraft.world.item.ItemStack extra = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, bonus);
