@@ -547,7 +547,7 @@ public final class Thoridrop {
                 // Fifth-wave guardians also need an explicit navigation request:
                 // target assignment alone does not start pathfinding for some Nicktale mobs.
                 if (mob.getNavigation().isDone() && mob.distanceToSqr(nearest) > 3.0 * 3.0) {
-                    mob.getNavigation().moveTo(nearest, 1.15);
+                    mob.getNavigation().moveTo(nearest, session.wave() == 5 ? 1.65 : 1.15);
                 }
             }
         }
@@ -812,6 +812,11 @@ public final class Thoridrop {
                 if (session.rarity() != DropSession.Rarity.LEGENDARY && mobId.startsWith("nicktaleepicdungeons:") && boss instanceof net.minecraft.world.entity.Mob mobBoss) addBasicMeleeGoal(mobBoss);
                 boss.setCustomName(Component.literal("✦ GUARDIÁN " + rarityName(session.rarity()) + " ✦").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
                 boss.setCustomNameVisible(true);
+                // Raise only the event guardian's base walking speed; leave normal wave mobs untouched.
+                if (boss instanceof net.minecraft.world.entity.Mob movingBoss) {
+                    var speed = movingBoss.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
+                    if (speed != null && speed.getBaseValue() < 0.32) speed.setBaseValue(0.32);
+                }
                 // Apply health only to the entity spawned for this Thoridrop event.
                 if (boss instanceof net.minecraft.world.entity.Mob mobBoss) {
                     var maxHealth = mobBoss.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
