@@ -834,9 +834,23 @@ public final class Thoridrop {
         if (waveMobs.isEmpty()) {
             net.minecraft.world.entity.Entity fallback = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (fallback != null) {
-                fallback.setPos(dropPosition.getX() + 0.5, dropPosition.getY() + 2, dropPosition.getZ() + 0.5);
-                if (fallback instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
-                if (dropLevel.addFreshEntity(fallback)) waveMobs.add(fallback.getUUID());
+                // The fallback must obey the same exclusion zone as every other mob.
+                for (int attempt = 0; attempt < 24; attempt++) {
+                    double a = attempt * Math.PI * 2.0 / 24.0;
+                    int fx = dropPosition.getX() + (int)Math.round(Math.cos(a) * 12);
+                    int fz = dropPosition.getZ() + (int)Math.round(Math.sin(a) * 12);
+                    BlockPos candidate = dropLevel.getHeightmapPos(
+                        net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                        new BlockPos(fx, dropPosition.getY(), fz));
+                    if (!dropLevel.getBlockState(candidate).isAir()
+                        || !dropLevel.getBlockState(candidate.above()).isAir()
+                        || !dropLevel.getBlockState(candidate.above(2)).isAir()
+                        || !dropLevel.getBlockState(candidate.below()).isSolidRender()) continue;
+                    fallback.setPos(candidate.getX() + 0.5, candidate.getY(), candidate.getZ() + 0.5);
+                    if (fallback instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
+                    if (dropLevel.addFreshEntity(fallback)) waveMobs.add(fallback.getUUID());
+                    break;
+                }
             }
         }
         waveTotal = waveMobs.size();
