@@ -13,7 +13,6 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
-import org.lwjgl.glfw.GLFW;
 
 /** Physical-client-only menu registration; no GUI classes load on a dedicated server. */
 @EventBusSubscriber(modid=Thoridrop.MOD_ID,value=Dist.CLIENT)
@@ -21,7 +20,7 @@ public final class ThoridropMenuClient {
     private static final KeyMapping.Category CATEGORY =
         new KeyMapping.Category(Identifier.fromNamespaceAndPath(Thoridrop.MOD_ID,"menu"));
     public static final KeyMapping OPEN = new KeyMapping("key.thoridrop.open_menu",
-        InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_H, CATEGORY);
+        InputConstants.Type.KEYBOARD, InputConstants.KEY_H, CATEGORY);
 
     private ThoridropMenuClient() {}
 
@@ -42,9 +41,9 @@ public final class ThoridropMenuClient {
         Minecraft mc=Minecraft.getInstance();
         while(OPEN.consumeClick()) {
             if(mc.player == null || mc.level == null) continue;
-            if(mc.screen instanceof ThoridropMenuScreen) {
-                mc.setScreen(null);
-            } else if(mc.screen == null) {
+            if(mc.gui.screen() instanceof ThoridropMenuScreen) {
+                mc.gui.setScreen(null);
+            } else if(mc.gui.screen() == null) {
                 mc.setScreen(new ThoridropMenuScreen());
                 ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(0));
             }
