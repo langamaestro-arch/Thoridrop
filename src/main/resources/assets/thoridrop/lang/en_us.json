@@ -1,1 +1,6 @@
-{"item.thoridrop.supply_fragment":"Supply Fragment","item.thoridrop.victory_trophy":"Victory Trophy"}
+{
+  "item.thoridrop.supply_fragment": "Supply Fragment",
+  "item.thoridrop.victory_trophy": "Victory Trophy",
+  "key.thoridrop.open_menu": "Open Thoridrop menu",
+  "key.category.thoridrop.menu": "Thoridrop"
+}
