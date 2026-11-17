@@ -524,7 +524,7 @@ public final class Thoridrop {
                 if (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(key)) available.add(id);
             }
             if (!available.isEmpty()) {
-                String chosen = available.get(dropLevel.random.nextInt(available.size()));
+                String chosen = available.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(available.size()));
                 mobIds = new String[]{"nicktaleepicdungeons:" + chosen};
                 broadcast("¡Jefe final seleccionado: " + chosen.replace('_', ' ') + "!");
             } else {
