@@ -99,6 +99,8 @@ public final class Thoridrop {
     private final java.util.Map<UUID, Integer> missingMobTicks = new java.util.HashMap<>();
     private final java.util.Set<UUID> respawnPending = new java.util.HashSet<>();
     private int guardianAttackTicks;
+    private int towerCheckTicks;
+    private int towerReinforcements;
     private BlockPos beaconLightPosition;
     private int waveDelay;
     private int waveTotal;
@@ -307,7 +309,11 @@ public final class Thoridrop {
                     participants.add(player.getUUID());
                 }
             }
-            if (waveDelay == 0 && ++guardianAttackTicks % 20 == 0) directWaveEnemiesToPlayers();
+            if (waveDelay == 0 && ++guardianAttackTicks % 20 == 0) {
+                directWaveEnemiesToPlayers();
+                suppressNicktaleSpecials();
+                checkTowerExploit();
+            }
             if (waveDelay > 0) {
                 waveDelay--;
                 if (waveDelay == 0) spawnWave();
@@ -519,6 +525,74 @@ public final class Thoridrop {
         }
     }
 
+
+    private void suppressNicktaleSpecials() {
+        if (session == null || session.wave() != 5 || session.rarity() == DropSession.Rarity.LEGENDARY) return;
+        for (UUID id : waveMobs) {
+            var entity = dropLevel.getEntity(id);
+            if (!(entity instanceof net.minecraft.world.entity.Mob boss)) continue;
+            if (!net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(boss.getType()).getNamespace().equals("nicktaleepicdungeons")) continue;
+            try {
+                java.lang.reflect.Field cooldown = boss.getClass().getDeclaredField("cooldown");
+                cooldown.setAccessible(true);
+                cooldown.setInt(boss, 12000);
+            } catch (NoSuchFieldException ignored) {
+                // Not all Nicktale entities use the same attack scheduler.
+            } catch (ReflectiveOperationException | RuntimeException ex) {
+                LOGGER.debug("Could not suppress boss cooldown", ex);
+            }
+        }
+    }
+
+    private void addBasicMeleeGoal(net.minecraft.world.entity.Mob boss) {
+        if (!(boss instanceof net.minecraft.world.entity.PathfinderMob pathfinder)) return;
+        try {
+            java.lang.reflect.Field goals = net.minecraft.world.entity.Mob.class.getDeclaredField("goalSelector");
+            goals.setAccessible(true);
+            var selector = (net.minecraft.world.entity.ai.goal.GoalSelector) goals.get(boss);
+            selector.addGoal(2, new net.minecraft.world.entity.ai.goal.MeleeAttackGoal(pathfinder, 1.1, true));
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            LOGGER.warn("Cannot install basic melee AI for Thoridrop boss", ex);
+        }
+    }
+
+    private void checkTowerExploit() {
+        if (session == null || session.wave() >= 5 || towerReinforcements >= 2) return;
+        if (++towerCheckTicks < 12) return;
+        towerCheckTicks = 0;
+        ServerPlayer elevated = null;
+        for (ServerPlayer p : dropLevel.players()) {
+            if (p.isCreative() || p.isSpectator()) continue;
+            if (p.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5,
+                dropPosition.getZ() + 0.5) > 28 * 28) continue;
+            if (p.getY() >= dropPosition.getY() + 3.5) { elevated = p; break; }
+        }
+        if (elevated == null) return;
+        String typeId = session.rarity() == DropSession.Rarity.COMMON ? "minecraft:skeleton" : "minecraft:pillager";
+        var type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse(typeId));
+        if (type == null) return;
+        var entity = type.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
+        if (!(entity instanceof net.minecraft.world.entity.Mob mob)) return;
+        double angle = net.minecraft.util.RandomSource.create().nextDouble() * Math.PI * 2;
+        int x = elevated.blockPosition().getX() + (int)Math.round(Math.cos(angle) * 8);
+        int z = elevated.blockPosition().getZ() + (int)Math.round(Math.sin(angle) * 8);
+        BlockPos ground = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+            new BlockPos(x, dropPosition.getY(), z));
+        mob.setPos(ground.getX() + 0.5, ground.getY(), ground.getZ() + 0.5);
+        mob.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+            new net.minecraft.world.item.ItemStack(session.rarity() == DropSession.Rarity.COMMON
+                ? net.minecraft.world.item.Items.BOW : net.minecraft.world.item.Items.CROSSBOW));
+        mob.setPersistenceRequired();
+        mob.setTarget(elevated);
+        if (dropLevel.addFreshEntity(mob)) {
+            waveMobs.add(mob.getUUID());
+            session.setWaveEnemyCount(session.livingWaveEnemies() + 1);
+            waveTotal++;
+            towerReinforcements++;
+            broadcast("Refuerzos a distancia: el suministro esta siendo defendido.");
+        }
+    }
+
     /** Distinctive fifth-wave guardian ability: a periodic telegraphed area attack. */
     private void tickGuardianAbility() {
         if (++guardianAttackTicks % 100 != 0) return;
@@ -627,6 +701,8 @@ public final class Thoridrop {
         if (session == null || session.phase() != DropSession.Phase.COMBAT) return;
         waveMobs.clear();
         guardianAttackTicks = 0;
+        towerCheckTicks = 0;
+        towerReinforcements = 0;
         missingMobTicks.clear();
         int wave = session.wave();
         int extra = session.rarity() == DropSession.Rarity.LEGENDARY ? 3
@@ -709,6 +785,7 @@ public final class Thoridrop {
                 }
             }
             if (wave == 5 && entity instanceof net.minecraft.world.entity.LivingEntity boss) {
+                if (session.rarity() != DropSession.Rarity.LEGENDARY && mobId.startsWith("nicktaleepicdungeons:") && boss instanceof net.minecraft.world.entity.Mob mobBoss) addBasicMeleeGoal(mobBoss);
                 boss.setCustomName(Component.literal("✦ GUARDIÁN " + rarityName(session.rarity()) + " ✦").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
                 boss.setCustomNameVisible(true);
                 // Apply health only to the entity spawned for this Thoridrop event.
