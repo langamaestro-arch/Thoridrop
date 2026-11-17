@@ -29,8 +29,12 @@ public final class DropStatistics {
         }catch(Exception e){throw new IllegalStateException("Cannot save Thoridrop statistics",e);}
     }
     public static synchronized String summary(UUID id) {
-        return "Thoridrop: suministros completados "+count(id,"wins")
-            +" | recompensas "+count(id,"claims")
-            +" | derrotas "+count(id,"deaths");
+        return "§6✦ THORIDROP §r| Victorias: " + count(id,"wins")
+            + " §7(Normal " + count(id,"wins_common")
+            + ", Mítico " + count(id,"wins_rare")
+            + ", Legendario " + count(id,"wins_legendary") + ")§r"
+            + " | Recompensas: " + count(id,"claims")
+            + " | Muertes: " + count(id,"deaths")
+            + " | Suministros invocados: " + count(id,"events_started");
     }
 }
