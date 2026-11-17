@@ -127,7 +127,7 @@ public final class ThoridropMenuScreen extends Screen {
                     int yy=cy+21+k*55;
                     line(gfx,k==0?"Victorias":k==1?"Legendarios":"Sin morir",cx,yy,0xFFEABDF6);
                     if(rr.length>k+2) {
-                        String[] parts=rr[k+2].replace("§6✦ THORIDROP §r","").split(" \\| ");
+                        String[] parts=rr[k+2].replace("§6✦ THORIDROP §r","").split(" \\\\| ");
                         for(int j=0;j<Math.min(2,parts.length);j++)
                             line(gfx,font.plainSubstrByWidth(parts[j],w-174),cx,yy+12+j*11,WHITE);
                     }
