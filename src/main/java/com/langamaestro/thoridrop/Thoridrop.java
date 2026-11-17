@@ -336,7 +336,6 @@ public final class Thoridrop {
             }
             if (waveDelay == 0 && ++guardianAttackTicks % 20 == 0) {
                 directWaveEnemiesToPlayers();
-                suppressNicktaleSpecials();
                 checkTowerExploit();
             }
             if (waveDelay > 0) {
@@ -543,6 +542,7 @@ public final class Thoridrop {
                 if (distance < best) { best = distance; nearest = player; }
             }
             if (nearest != null) {
+                if (session.wave() == 5) continue; // Nicktale controls its own boss AI.
                 mob.setTarget(nearest);
                 // Fifth-wave guardians also need an explicit navigation request:
                 // target assignment alone does not start pathfinding for some Nicktale mobs.
@@ -733,31 +733,22 @@ public final class Thoridrop {
                 default -> new String[]{"ravager", "vindicator"};
             };
         };
-        // Draw one random fifth-wave opponent from the configured Nicktale rarity pool.
-        // All entity IDs are namespaced, so vanilla and Nicktale mobs can share this path.
+        // Fixed Nicktale guardians, with their native attributes, attacks and AI.
         if (wave == 5) {
-            String[] pool = switch (session.rarity()) {
-                case COMMON -> new String[]{"mutant_zombie", "violet_flying_witch",
-                    "fortress_guard", "vix_eclipse_fox"};
-                case RARE -> new String[]{"gravebreaker_brute", "don_cascabel", "blueflame_elder", "buried_axe_knight", "voidborne_lich"};
-                case LEGENDARY -> new String[]{"black_knight", "cinderhorn_demon",
-                    "runebound_colossus", "armored_skeleton", "widow_of_the_well",
-                    "sultan_eternal_sands", "eclipse_colossus", "cerberus"};
+            String chosen = switch (session.rarity()) {
+                case COMMON -> "gravebreaker_brute";
+                case RARE -> "buried_axe_knight";
+                case LEGENDARY -> "black_knight";
             };
-            java.util.List<String> available = new java.util.ArrayList<>();
-            for (String id : pool) {
-                var key = net.minecraft.resources.Identifier.fromNamespaceAndPath("nicktaleepicdungeons", id);
-                if (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(key)) available.add(id);
-            }
-            if (!available.isEmpty()) {
-                String chosen = available.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(available.size()));
+            var key = net.minecraft.resources.Identifier.fromNamespaceAndPath("nicktaleepicdungeons", chosen);
+            if (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(key)) {
                 mobIds = new String[]{"nicktaleepicdungeons:" + chosen};
                 guardianDisplayName = chosen.replace('_', ' ').toUpperCase(java.util.Locale.ROOT);
-                broadcast("¡Jefe final seleccionado: " + chosen.replace('_', ' ') + "!");
+                broadcast("¡Jefe final: " + chosen.replace('_', ' ') + "!");
             } else {
                 mobIds = new String[]{"minecraft:ravager"};
                 guardianDisplayName = "RAVAGER";
-                broadcast("No hay jefes de Nicktale registrados; usando guardián alternativo.");
+                broadcast("Falta el jefe de Nicktale " + chosen + "; usando guardián alternativo.");
             }
         } else {
             for (int j = 0; j < mobIds.length; j++) mobIds[j] = "minecraft:" + mobIds[j];
@@ -808,33 +799,7 @@ public final class Thoridrop {
                         new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CROSSBOW));
                 }
             }
-            if (wave == 5 && entity instanceof net.minecraft.world.entity.LivingEntity boss) {
-                if (session.rarity() != DropSession.Rarity.LEGENDARY && mobId.startsWith("nicktaleepicdungeons:") && boss instanceof net.minecraft.world.entity.Mob mobBoss) addBasicMeleeGoal(mobBoss);
-                boss.setCustomName(Component.literal("✦ GUARDIÁN " + rarityName(session.rarity()) + " ✦").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
-                boss.setCustomNameVisible(true);
-                // Raise only the event guardian's base walking speed; leave normal wave mobs untouched.
-                if (boss instanceof net.minecraft.world.entity.Mob movingBoss) {
-                    var speed = movingBoss.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
-                    if (speed != null && speed.getBaseValue() < 0.32) speed.setBaseValue(0.32);
-                }
-                // Apply health only to the entity spawned for this Thoridrop event.
-                if (boss instanceof net.minecraft.world.entity.Mob mobBoss) {
-                    var maxHealth = mobBoss.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
-                    if (maxHealth != null) {
-                        double targetHp = switch (session.rarity()) {
-                            case COMMON -> 100.0;
-                            case RARE -> 250.0;
-                            case LEGENDARY -> 450.0;
-                        };
-                        maxHealth.setBaseValue(targetHp);
-                        mobBoss.setHealth((float) targetHp);
-                    }
-                }
-                if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 20 * 60 * 10, 1));
-                if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, 1));
-                if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 60 * 10, 0));
-                boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 20 * 60 * 10, 0));
-            }
+            // Do not override fifth-wave guardian health, movement, effects, name or combat goals.
             if (entity instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
