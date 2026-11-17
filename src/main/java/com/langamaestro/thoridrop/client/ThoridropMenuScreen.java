@@ -18,6 +18,20 @@ public final class ThoridropMenuScreen extends Screen {
     private static String snapshot="";
     private int tab=0;
     private int x,y,w,h;
+    private int marketPage=0,rankPage=0,rankMode=0,confirmId=-1;
+    private static final String[] CATEGORIES={"Materiales","Armas","Armaduras","Herramientas","Consumibles"};
+    private static final String[] NAMES={"Hierro x16","Diamantes x5","Manzanas doradas x4","Espada del guardián",
+        "Peto de diamante","Pico de diamante","Arco mítico","Casco de netherita",
+        "Zanahorias doradas x12","Esmeraldas x12","Hacha legendaria","Flechas x64"};
+    private static final int[] COST={15,60,85,250,140,125,190,280,95,55,245,35};
+    private static final int[] LEVEL={0,0,0,37,28,30,36,42,0,0,40,0};
+    private static final String[] GROUP={"Materiales","Materiales","Consumibles","Armas",
+        "Armaduras","Herramientas","Armas","Armaduras",
+        "Consumibles","Materiales","Herramientas","Consumibles"};
+    private static final net.minecraft.world.item.Item[] ICONS={
+        Items.IRON_INGOT,Items.DIAMOND,Items.GOLDEN_APPLE,Items.NETHERITE_SWORD,
+        Items.DIAMOND_CHESTPLATE,Items.DIAMOND_PICKAXE,Items.BOW,Items.NETHERITE_HELMET,
+        Items.GOLDEN_CARROT,Items.EMERALD,Items.NETHERITE_AXE,Items.ARROW};
 
     public ThoridropMenuScreen() {
         super(Minecraft.getInstance(),Minecraft.getInstance().font,Component.literal("Thoridrop"));
@@ -53,6 +67,7 @@ public final class ThoridropMenuScreen extends Screen {
             final int selected=i;
             addRenderableWidget(Button.builder(Component.literal(TABS[i]),button->{
                 tab=selected;
+                confirmId=-1;
                 rebuildWidgets();
             }).bounds(x+12,y+41+i*30,left,23).build());
         }
@@ -60,14 +75,43 @@ public final class ThoridropMenuScreen extends Screen {
             .bounds(x+w-66,y+9,24,20).build());
         addRenderableWidget(Button.builder(Component.literal("X"),button->onClose())
             .bounds(x+w-38,y+9,24,20).build());
+        if(tab==2) {
+            addRenderableWidget(Button.builder(Component.literal("‹"),button->{
+                rankPage=Math.max(0,rankPage-1); rebuildWidgets();
+            }).bounds(x+153,y+h-36,26,20).build());
+            addRenderableWidget(Button.builder(Component.literal("›"),button->{
+                rankPage=Math.min(3,rankPage+1); rebuildWidgets();
+            }).bounds(x+w-40,y+h-36,26,20).build());
+            addRenderableWidget(Button.builder(Component.literal("Cambiar ranking"),button->{
+                rankMode=(rankMode+1)%3; rankPage=0; rebuildWidgets();
+            }).bounds(x+188,y+h-36,123,20).build());
+        }
         if(tab==3) {
-            String[] names={"Hierro","Diamantes","Manzanas","Arma especial"};
-            int[] prices={15,60,85,250};
-            for(int i=0;i<4;i++) {
+            addRenderableWidget(Button.builder(Component.literal("‹"),button->{
+                marketPage=(marketPage+4)%5; confirmId=-1; rebuildWidgets();
+            }).bounds(x+152,y+72,23,20).build());
+            addRenderableWidget(Button.builder(Component.literal("›"),button->{
+                marketPage=(marketPage+1)%5; confirmId=-1; rebuildWidgets();
+            }).bounds(x+w-39,y+72,23,20).build());
+            int row=0;
+            for(int i=0;i<NAMES.length;i++) {
+                if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
                 final int action=i+1;
-                addRenderableWidget(Button.builder(Component.literal("Comprar "+prices[i]),
-                    button->ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(action)))
-                    .bounds(x+w-106,y+53+i*40,93,22).build());
+                final boolean isConfirm=confirmId==action;
+                addRenderableWidget(Button.builder(
+                    Component.literal(isConfirm?"Confirmar":("Comprar "+COST[i])),
+                    button->{
+                        if(confirmId!=action) {
+                            confirmId=action;
+                            rebuildWidgets();
+                        } else {
+                            confirmId=-1;
+                            ClientPacketDistributor.sendToServer(
+                                new ThoridropMenuNetwork.MenuRequest(action));
+                            rebuildWidgets();
+                        }
+                    }).bounds(x+w-104,y+103+row*45,88,21).build());
+                row++;
             }
         }
     }
@@ -107,6 +151,9 @@ public final class ThoridropMenuScreen extends Screen {
                 line(gfx,"Racha máxima "+a[10],cx,cy+139,MUTED);
                 line(gfx,"Mejor tiempo: "+(a[11]<=0?"Sin récord":(a[11]/20)+"s"),cx,cy+152,WHITE);
                 line(gfx,"Victorias cooperativas: "+a[12],cx,cy+165,WHITE);
+                String[] rr=rows();
+                if(rr.length>14)line(gfx,"Historial: "+font.plainSubstrByWidth(
+                    rr[14].split("\\\\|")[0],w-175),cx,cy+181,MUTED);
             }
             case 1 -> {
                 line(gfx,"LOGROS THORIDROP",cx,cy,GOLD);
@@ -121,30 +168,36 @@ public final class ThoridropMenuScreen extends Screen {
                 line(gfx,"Victorias contrarreloj: "+a[13],cx,cy+166,MUTED);
             }
             case 2 -> {
-                line(gfx,"CLASIFICACIÓN DEL SERVIDOR",cx,cy,GOLD);
                 String[] rr=rows();
-                for(int k=0;k<3;k++) {
-                    int yy=cy+21+k*55;
-                    line(gfx,k==0?"Victorias":k==1?"Legendarios":"Sin morir",cx,yy,0xFFEABDF6);
-                    if(rr.length>k+2) {
-                        String[] parts=rr[k+2].replace("§6✦ THORIDROP §r","").split(" \\\\| ");
-                        for(int j=0;j<Math.min(2,parts.length);j++)
-                            line(gfx,font.plainSubstrByWidth(parts[j],w-174),cx,yy+12+j*11,WHITE);
-                    }
-                }
+                String caption=switch(rankMode) {
+                    case 1 -> "VICTORIAS LEGENDARIAS";
+                    case 2 -> "DESAFÍOS SIN MORIR";
+                    default -> "VICTORIAS TOTALES";
+                };
+                line(gfx,caption,cx,cy,GOLD);
+                int index=2+rankMode*4+rankPage;
+                String current=rr.length>index?rr[index]:"Sin clasificaciones";
+                String[] players=current.split(" \\\\| ");
+                for(int i=0;i<Math.min(players.length,6);i++)
+                    line(gfx,font.plainSubstrByWidth(players[i],w-182),cx,cy+24+i*24,WHITE);
+                line(gfx,"Página "+(rankPage+1)+"/4",cx+5,cy+182,MUTED);
             }
             case 3 -> {
                 line(gfx,"MERCADO DE RECOMPENSAS",cx,cy,GOLD);
-                ItemStack[] icons={new ItemStack(Items.IRON_INGOT),new ItemStack(Items.DIAMOND),
-                    new ItemStack(Items.GOLDEN_APPLE),new ItemStack(Items.NETHERITE_SWORD)};
-                String[] names={"16 lingotes de hierro","5 diamantes","4 manzanas doradas","Espada encantada"};
-                for(int i=0;i<4;i++) {
-                    int yy=cy+23+i*40;
-                    gfx.fill(cx-3,yy-3,x+w-11,yy+33,0xFF342444);
-                    gfx.item(icons[i],cx+3,yy+4);
-                    line(gfx,names[i],cx+25,yy+9,WHITE);
+                line(gfx,"Categoría: "+CATEGORIES[marketPage],cx+34,cy+30,0xFFEABDF6);
+                int row=0;
+                for(int i=0;i<NAMES.length;i++) {
+                    if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
+                    int yy=cy+53+row*45;
+                    gfx.fill(cx-3,yy-3,x+w-11,yy+38,0xFF342444);
+                    gfx.item(new ItemStack(ICONS[i]),cx+3,yy+5);
+                    line(gfx,NAMES[i],cx+26,yy+7,WHITE);
+                    line(gfx,"Precio: "+COST[i]+" pts"+
+                        (LEVEL[i]>0?" • Encant. nivel "+LEVEL[i]:""),
+                        cx+26,yy+20,MUTED);
+                    row++;
                 }
-                line(gfx,"Compras verificadas por el servidor.",cx,cy+193,MUTED);
+                line(gfx,"Compra con confirmación. Saldo: "+balance(),cx,cy+195,MUTED);
             }
             case 4 -> {
                 line(gfx,"DESAFÍOS Y PROGRESO",cx,cy,GOLD);
