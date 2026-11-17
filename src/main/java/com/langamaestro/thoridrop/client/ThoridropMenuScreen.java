@@ -153,7 +153,7 @@ public final class ThoridropMenuScreen extends Screen {
                 line(gfx,"Victorias cooperativas: "+a[12],cx,cy+165,WHITE);
                 String[] rr=rows();
                 if(rr.length>14)line(gfx,"Historial: "+font.plainSubstrByWidth(
-                    rr[14].split("\\\\|")[0],w-175),cx,cy+181,MUTED);
+                    rr[14].split("\\|")[0],w-175),cx,cy+181,MUTED);
             }
             case 1 -> {
                 line(gfx,"LOGROS THORIDROP",cx,cy,GOLD);
@@ -177,7 +177,7 @@ public final class ThoridropMenuScreen extends Screen {
                 line(gfx,caption,cx,cy,GOLD);
                 int index=2+rankMode*4+rankPage;
                 String current=rr.length>index?rr[index]:"Sin clasificaciones";
-                String[] players=current.split(" \\\\| ");
+                String[] players=current.split(" \\| ");
                 for(int i=0;i<Math.min(players.length,6);i++)
                     line(gfx,font.plainSubstrByWidth(players[i],w-182),cx,cy+24+i*24,WHITE);
                 line(gfx,"Página "+(rankPage+1)+"/4",cx+5,cy+182,MUTED);
