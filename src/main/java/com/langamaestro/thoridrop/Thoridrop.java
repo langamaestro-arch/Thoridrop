@@ -674,7 +674,11 @@ public final class Thoridrop {
         if (specialEvent) {
             int bonus = switch (session.rarity()) {case COMMON -> 2; case RARE -> 4; case LEGENDARY -> 8;};
             net.minecraft.world.item.ItemStack extra = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, bonus);
-            if (!player.getInventory().add(extra) && !extra.isEmpty()) player.drop(extra, false);
+            if (!player.getInventory().add(extra) && !extra.isEmpty()) {
+                var dropped = new net.minecraft.world.entity.item.ItemEntity(player.level(), player.getX(), player.getY(), player.getZ(), extra);
+                dropped.setPickUpDelay(20);
+                player.level().addFreshEntity(dropped);
+            }
             player.sendSystemMessage(Component.literal("Recompensa extraordinaria: +" + bonus + " diamantes."));
         }
         player.level().playSound(null,player.blockPosition(),net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP,
