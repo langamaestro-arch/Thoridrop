@@ -743,8 +743,13 @@ public final class Thoridrop {
             var key = net.minecraft.resources.Identifier.fromNamespaceAndPath("nicktaleepicdungeons", chosen);
             if (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(key)) {
                 mobIds = new String[]{"nicktaleepicdungeons:" + chosen};
-                guardianDisplayName = chosen.replace('_', ' ').toUpperCase(java.util.Locale.ROOT);
-                broadcast("¡Jefe final: " + chosen.replace('_', ' ') + "!");
+                guardianDisplayName = switch (chosen) {
+                    case "gravebreaker_brute" -> "QUEBRATUMBAS";
+                    case "buried_axe_knight" -> "CABALLERO DEL HACHA SEPULTADA";
+                    case "black_knight" -> "CABALLERO NEGRO";
+                    default -> chosen.replace('_', ' ').toUpperCase(java.util.Locale.ROOT);
+                };
+                broadcast("¡Jefe final: " + guardianDisplayName + "!");
             } else {
                 mobIds = new String[]{"minecraft:ravager"};
                 guardianDisplayName = "RAVAGER";
