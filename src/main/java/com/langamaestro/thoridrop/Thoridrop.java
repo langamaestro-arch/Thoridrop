@@ -41,6 +41,15 @@ public final class Thoridrop {
     private int participationRadius = 24;
     private int rewardClaimTimeoutTicks = 20 * 600;
     private int rewardTicks;
+    private int mobMultiplierPercent = 100;
+    private int extraMobsPerPlayer = 2;
+    private int maxAdditionalMobs = 12;
+    private int flawlessDiamondBonus = 2;
+    private int randomModifierChance = 25;
+    private int modifierType; // 0 none, 1 swarm, 2 haste, 3 bonus
+    private final java.util.Set<UUID> eventDeaths = new java.util.HashSet<>();
+    private final java.util.Map<UUID,Integer> playerOutOfRangeTicks = new java.util.HashMap<>();
+    private int abandonSeconds = 180;
     private long intervalTicks = 72000L;
     private int spawnDistanceBlocks = 160;
     private int arrivalTimeoutTicks = 6000;
@@ -70,6 +79,12 @@ public final class Thoridrop {
         props.setProperty("participation_radius_blocks", "24");
         props.setProperty("reward_claim_timeout_seconds", "600");
         props.setProperty("keep_inventory_on_event_death", "true");
+        props.setProperty("mob_count_percent", "100");
+        props.setProperty("extra_mobs_per_additional_player", "2");
+        props.setProperty("max_extra_mobs", "12");
+        props.setProperty("flawless_bonus_diamonds", "2");
+        props.setProperty("random_modifier_chance_percent", "25");
+        props.setProperty("abandon_timeout_seconds", "180");
         try {
             java.nio.file.Files.createDirectories(path.getParent());
             if (java.nio.file.Files.exists(path)) {
@@ -90,6 +105,12 @@ public final class Thoridrop {
             preserveInventoryOnEventDeath = Boolean.parseBoolean(props.getProperty("keep_inventory_on_event_death", "true"));
             participationRadius = Math.max(8, Math.min(96, Integer.parseInt(props.getProperty("participation_radius_blocks", "24"))));
             rewardClaimTimeoutTicks = Math.max(30, Math.min(86400, Integer.parseInt(props.getProperty("reward_claim_timeout_seconds", "600")))) * 20;
+            mobMultiplierPercent = Math.max(25, Math.min(300, Integer.parseInt(props.getProperty("mob_count_percent", "100"))));
+            extraMobsPerPlayer = Math.max(0, Math.min(10, Integer.parseInt(props.getProperty("extra_mobs_per_additional_player", "2"))));
+            maxAdditionalMobs = Math.max(0, Math.min(40, Integer.parseInt(props.getProperty("max_extra_mobs", "12"))));
+            flawlessDiamondBonus = Math.max(0, Math.min(32, Integer.parseInt(props.getProperty("flawless_bonus_diamonds", "2"))));
+            randomModifierChance = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("random_modifier_chance_percent", "25"))));
+            abandonSeconds = Math.max(30, Math.min(3600, Integer.parseInt(props.getProperty("abandon_timeout_seconds", "180"))));
             try (var output = java.nio.file.Files.newOutputStream(path)) {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
@@ -160,6 +181,10 @@ public final class Thoridrop {
                     player.sendSystemMessage(Component.literal(DropStatistics.summary(player.getUUID())));
                     return 1;
                 }))
+            .then(Commands.literal("ranking")
+                .executes(context -> { context.getSource().sendSuccess(() -> Component.literal(DropStatistics.leaderboard("wins", 10)), false); return 1; })
+                .then(Commands.literal("legendario").executes(context -> { context.getSource().sendSuccess(() -> Component.literal(DropStatistics.leaderboard("wins_legendary", 10)), false); return 1; }))
+                .then(Commands.literal("sinmorir").executes(context -> { context.getSource().sendSuccess(() -> Component.literal(DropStatistics.leaderboard("flawless", 10)), false); return 1; })))
             .then(Commands.literal("status")
                 .executes(context -> {
                     String message = session == null
@@ -263,6 +288,8 @@ public final class Thoridrop {
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         specialEvent = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < specialEventChance;
+        modifierType = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < randomModifierChance
+            ? 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(3) : 0;
         availableTicks = 0;
         guardianDisplayName = "GUARDIÁN";
         clearHud();
@@ -278,13 +305,17 @@ public final class Thoridrop {
         claimedRewards.clear();
         participants.clear();
         completedStats.clear();
+        eventDeaths.clear();
+        playerOutOfRangeTicks.clear();
         rewardTicks = 0;
         waveTotal = 0;
         guardianAttackTicks = 0;
         beaconLightPosition = null;
         chestOpen = false;
         chestOpeningTicks = -1;
+        DropStatistics.remember(player.getUUID(), player.getGameProfile().name());
         DropStatistics.add(player.getUUID(), "events_started");
+        if(modifierType != 0) broadcast("✦ Modificador del desafío: " + switch(modifierType) { case 1 -> "HORDA ENEMIGA"; case 2 -> "ENEMIGOS VELOCES"; default -> "BOTÍN EXTRA"; });
         DropStatistics.add(player.getUUID(), "started_" + rarity.name().toLowerCase(java.util.Locale.ROOT));
         player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
         if (specialEvent) broadcast("¡SUMINISTRO EXTRAORDINARIO! Recompensas adicionales al completar el evento.");
@@ -386,10 +417,21 @@ public final class Thoridrop {
                 if ((multiplayerEnabled || participants.isEmpty() || participants.contains(player.getUUID()))
                         && !player.isSpectator() && !player.isCreative()
                         && player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5, dropPosition.getZ() + 0.5) <= participationRadius * participationRadius) {
-                    participants.add(player.getUUID());
+                    if(participants.add(player.getUUID())) DropStatistics.remember(player.getUUID(), player.getGameProfile().name());
+                    playerOutOfRangeTicks.remove(player.getUUID());
                 }
             }
-            if (waveDelay == 0 && ++guardianAttackTicks % 20 == 0) {
+            // Players who leave or disconnect long enough stop occupying a reward slot.
+            if (++guardianAttackTicks % 20 == 0) {
+                for (UUID id : java.util.Set.copyOf(participants)) {
+                    ServerPlayer online = dropLevel.getServer().getPlayerList().getPlayer(id);
+                    boolean absent = online == null || online.level()!=dropLevel || online.distanceToSqr(dropPosition.getX()+0.5, dropPosition.getY()+0.5, dropPosition.getZ()+0.5) > 96 * 96;
+                    if(absent && playerOutOfRangeTicks.merge(id,20,Integer::sum) >= abandonSeconds * 20) {
+                        participants.remove(id); playerOutOfRangeTicks.remove(id);
+                    } else if (!absent) playerOutOfRangeTicks.remove(id);
+                }
+            }
+            if (waveDelay == 0 && guardianAttackTicks % 20 == 0) {
                 directWaveEnemiesToPlayers();
                 checkTowerExploit();
             }
@@ -419,6 +461,7 @@ public final class Thoridrop {
                 if (session.phase() == DropSession.Phase.REWARDS) {
                     for (UUID id : participants) if (completedStats.add(id)) {
                         DropStatistics.add(id, "wins");
+                        if(!eventDeaths.contains(id)) DropStatistics.add(id,"flawless");
                         DropStatistics.add(id, "wins_" + session.rarity().name().toLowerCase(java.util.Locale.ROOT));
                     }
                     if (globalAnnouncements) broadcast("¡Cinco oleadas completadas! Los participantes pueden recoger su recompensa.");
@@ -780,6 +823,13 @@ public final class Thoridrop {
         int extra = session.rarity() == DropSession.Rarity.LEGENDARY ? 3
                   : session.rarity() == DropSession.Rarity.RARE ? 1 : 0;
         int count = wave == 5 ? 1 : 2 + wave + extra;
+        if (wave != 5) {
+            count = Math.max(1, count * mobMultiplierPercent / 100);
+            int additional = Math.min(maxAdditionalMobs, Math.max(0, participants.size()-1) * extraMobsPerPlayer);
+            count += additional;
+            if (modifierType == 1) count += Math.max(2, count / 2);
+            count = Math.min(50, count);
+        }
         String[] mobIds = switch (session.rarity()) {
             case COMMON -> switch (wave) {
                 case 1 -> new String[]{"zombie", "skeleton"};
@@ -865,6 +915,9 @@ public final class Thoridrop {
             if (entity == null) entity = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
+            if (wave < 5 && modifierType == 2 && entity instanceof net.minecraft.world.entity.LivingEntity fast) {
+                fast.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 1200, 0));
+            }
             if (wave < 5 && entity instanceof net.minecraft.world.entity.Mob ranged) {
                 if (mobId.equals("minecraft:skeleton") || mobId.equals("minecraft:stray")) {
                     ranged.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
@@ -931,9 +984,11 @@ public final class Thoridrop {
         if (!(event.getEntity() instanceof ServerPlayer player) || !fightingNearDrop(player)) return;
         if (!preserveInventoryOnEventDeath) {
             DropStatistics.add(player.getUUID(), "deaths");
+            eventDeaths.add(player.getUUID());
             return;
         }
         UUID id = player.getUUID();
+        eventDeaths.add(id);
         participants.add(id);
         java.util.List<net.minecraft.world.item.ItemStack> saved = new java.util.ArrayList<>();
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
@@ -987,6 +1042,16 @@ public final class Thoridrop {
                 claimedRewards.add(player.getUUID());
                 grantRewards(player);
                 DropStatistics.add(player.getUUID(), "claims");
+                if(!eventDeaths.contains(player.getUUID()) && flawlessDiamondBonus > 0) {
+                    int bonus = flawlessDiamondBonus + (modifierType == 3 ? 2 : 0);
+                    var prize = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, bonus);
+                    if(!player.getInventory().add(prize) && !prize.isEmpty())
+                        player.drop(prize, false);
+                    player.sendSystemMessage(Component.literal("✦ Desafío sin morir: +" + bonus + " diamantes."));
+                } else if (modifierType == 3) {
+                    var prize = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 3);
+                    if(!player.getInventory().add(prize) && !prize.isEmpty()) player.drop(prize,false);
+                }
                 DropStatistics.add(player.getUUID(), "claims_" + session.rarity().name().toLowerCase(java.util.Locale.ROOT));
                 if (claimedRewards.containsAll(participants)) {
                     dropLevel.removeBlock(dropPosition, false);
