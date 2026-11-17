@@ -7,7 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 public final class ThoridropAdvancements {
     private ThoridropAdvancements() {}
     public static void grant(ServerPlayer player,String name,int points) {
-        var advancement=player.getServer().getAdvancements().get(
+        var advancement=player.level().getServer().getAdvancements().get(
             Identifier.fromNamespaceAndPath("thoridrop",name));
         if(advancement == null) return;
         // Vanilla award is persisted with player advancement data.
