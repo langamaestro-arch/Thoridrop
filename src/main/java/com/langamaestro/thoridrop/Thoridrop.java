@@ -33,6 +33,7 @@ public final class Thoridrop {
     private int locatorTicks;
     private long automaticTicks;
     private static final long AUTO_INTERVAL_TICKS = 20L * 60 * 60; // 60 minutes
+    private static final int[] AUTO_RARITY_WEIGHTS = {6, 3, 1}; // Normal / Mythic / Legendary
     private int arrivalTicks;
     private Block arrivingCrate;
     private net.minecraft.server.level.ServerBossEvent eventBar;
@@ -205,7 +206,10 @@ public final class Thoridrop {
                         default -> DropSession.Rarity.COMMON;
                     };
                     createDrop(target, rarity);
-                    if (session != null) broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
+                    if (session != null) {
+                        broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
+                        for (ServerPlayer online : server.getPlayerList().getPlayers()) online.playNotifySound(net.minecraft.sounds.SoundEvents.RAID_HORN, net.minecraft.sounds.SoundSource.MASTER, 0.8f, 1.0f);
+                    }
                 }
             }
             return;
@@ -325,7 +329,7 @@ public final class Thoridrop {
         }
         String state = switch (session.phase()) {
             case AVAILABLE -> "BUSCANDO SUMINISTRO";
-            case COMBAT -> (session.wave() == 5 ? "GUARDIÁN FINAL  •  " : "") + "OLEADA " + session.wave() + "/5  •  ELIMINADOS "
+            case COMBAT -> (session.wave() == 5 ? "GUARDIÁN FINAL  •  " : "") + "OLEADA " + session.wave() + "/5  •  " + (waveDelay > 0 ? "SIGUIENTE EN " + ((waveDelay + 19) / 20) + "s  •  " : "") + "ELIMINADOS "
                 + Math.max(0, waveTotal - waveMobs.size()) + "/" + waveTotal;
             case REWARDS -> "RECOMPENSAS DESBLOQUEADAS  •  ABRE EL COFRE";
             case FINISHED -> "EVENTO FINALIZADO";
@@ -482,14 +486,17 @@ public final class Thoridrop {
                     new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 2 + random.nextInt(3)),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 12),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 2)};
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 2),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, 8 + random.nextInt(8))};
                 case LEGENDARY -> new net.minecraft.world.item.ItemStack[] {
                     new net.minecraft.world.item.ItemStack(diamondArmor[firstArmorIndex]),
                     new net.minecraft.world.item.ItemStack(diamondArmor[(firstArmorIndex + 1 + random.nextInt(diamondArmor.length - 1)) % diamondArmor.length]),
                     new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5 + random.nextInt(4)),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 16),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4)};
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, 1),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, 16 + random.nextInt(16))};
             };
             for (net.minecraft.world.item.ItemStack item : loot) {
                 if (!player.getInventory().add(item)) {
@@ -498,6 +505,7 @@ public final class Thoridrop {
                 }
             }
             player.sendSystemMessage(Component.literal("Thoridrop: personal rewards delivered!"));
+            player.playNotifySound(net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
         }
     }
 
@@ -519,7 +527,7 @@ public final class Thoridrop {
                 case 1 -> new String[]{"zombie"};
                 case 2 -> new String[]{"zombie", "skeleton"};
                 case 3 -> new String[]{"skeleton", "spider"};
-                case 4 -> new String[]{"husk", "stray"};
+                case 4 -> new String[]{"husk", "stray", "skeleton"};
                 default -> new String[]{"ravager"};
             };
             case RARE -> switch (wave) {
@@ -532,8 +540,8 @@ public final class Thoridrop {
             case LEGENDARY -> switch (wave) {
                 case 1 -> new String[]{"vindicator", "pillager"};
                 case 2 -> new String[]{"witch", "vindicator"};
-                case 3 -> new String[]{"witch", "vindicator"};
-                case 4 -> new String[]{"pillager", "evoker", "vindicator"};
+                case 3 -> new String[]{"witch", "vindicator", "pillager"};
+                case 4 -> new String[]{"pillager", "evoker", "vindicator", "skeleton"};
                 default -> new String[]{"ravager", "vindicator"};
             };
         };
