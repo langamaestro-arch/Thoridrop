@@ -69,6 +69,7 @@ public final class Thoridrop {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
         } catch (Exception ex) { LOGGER.error("Thoridrop config load failed", ex); }
+        RewardManager.load();
         configLoaded = true;
     }
 
@@ -111,6 +112,7 @@ public final class Thoridrop {
 
     public Thoridrop(IEventBus modBus) {
         DropBlocks.register(modBus);
+        DropItems.register(modBus);
         NeoForge.EVENT_BUS.register(this);
         LOGGER.info("Thoridrop initialized");
     }
@@ -644,55 +646,19 @@ public final class Thoridrop {
     }
 
     private void grantRewards(ServerPlayer player) {
-        {
-            java.util.Random random = new java.util.Random();
-            net.minecraft.world.item.Item[] ironArmor = {
-                net.minecraft.world.item.Items.IRON_HELMET, net.minecraft.world.item.Items.IRON_CHESTPLATE,
-                net.minecraft.world.item.Items.IRON_LEGGINGS, net.minecraft.world.item.Items.IRON_BOOTS};
-            net.minecraft.world.item.Item[] diamondArmor = {
-                net.minecraft.world.item.Items.DIAMOND_HELMET, net.minecraft.world.item.Items.DIAMOND_CHESTPLATE,
-                net.minecraft.world.item.Items.DIAMOND_LEGGINGS, net.minecraft.world.item.Items.DIAMOND_BOOTS};
-            net.minecraft.world.item.Item[] ironGear = {
-                net.minecraft.world.item.Items.IRON_SWORD, net.minecraft.world.item.Items.IRON_PICKAXE,
-                net.minecraft.world.item.Items.IRON_AXE, net.minecraft.world.item.Items.IRON_SHOVEL};
-            net.minecraft.world.item.Item[] diamondGear = {
-                net.minecraft.world.item.Items.DIAMOND_SWORD, net.minecraft.world.item.Items.DIAMOND_PICKAXE,
-                net.minecraft.world.item.Items.DIAMOND_AXE, net.minecraft.world.item.Items.DIAMOND_SHOVEL};
-            int firstArmorIndex = random.nextInt(diamondArmor.length);
-            net.minecraft.world.item.ItemStack[] loot = switch (session.rarity()) {
-                case COMMON -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(ironArmor[random.nextInt(ironArmor.length)]),
-                    new net.minecraft.world.item.ItemStack(ironGear[random.nextInt(ironGear.length)]),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 4 + random.nextInt(5)),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 12)};
-                case RARE -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(ironArmor[random.nextInt(ironArmor.length)]),
-                    new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 2 + random.nextInt(3)),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 12),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 2),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, 8 + random.nextInt(8))};
-                case LEGENDARY -> new net.minecraft.world.item.ItemStack[] {
-                    new net.minecraft.world.item.ItemStack(diamondArmor[firstArmorIndex]),
-                    new net.minecraft.world.item.ItemStack(diamondArmor[(firstArmorIndex + 1 + random.nextInt(diamondArmor.length - 1)) % diamondArmor.length]),
-                    new net.minecraft.world.item.ItemStack(diamondGear[random.nextInt(diamondGear.length)]),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 5 + random.nextInt(4)),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COOKED_BEEF, 16),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GOLDEN_APPLE, 4),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, 1),
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, 16 + random.nextInt(16))};
-            };
-            for (net.minecraft.world.item.ItemStack item : loot) {
-                if (!player.getInventory().add(item)) {
-                    net.minecraft.world.entity.item.ItemEntity dropped = new net.minecraft.world.entity.item.ItemEntity(dropLevel, player.getX(), player.getY(), player.getZ(), item);
-                    dropLevel.addFreshEntity(dropped);
-                }
-            }
-            player.sendSystemMessage(Component.literal("Thoridrop: personal rewards delivered!"));
-            player.level().playSound(null, player.blockPosition(), net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
-        }
+        RewardManager.give(player,session.rarity());
+        player.level().playSound(null,player.blockPosition(),net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP,
+            net.minecraft.sounds.SoundSource.PLAYERS,0.8f,1.2f);
     }
 
+    @SubscribeEvent
+    public void onEventMobDamaged(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
+        if(session==null || session.phase()!=DropSession.Phase.COMBAT || dropLevel==null) return;
+        if(!waveMobs.contains(event.getEntity().getUUID())) return;
+        if(event.getSource().getEntity() instanceof ServerPlayer player) {
+            session.recordDamage(player.getUUID(),event.getNewDamage());
+        }
+    }
     private void broadcast(String message) {
         for (ServerPlayer p : dropLevel.players()) p.sendSystemMessage(Component.literal(message));
     }
@@ -904,9 +870,12 @@ public final class Thoridrop {
                 event.setCanceled(true);
                 return;
             }
-            if (!participants.contains(player.getUUID())) {
+            if (!participants.contains(player.getUUID()) && !session.isEligible(player.getUUID())) {
                 player.sendSystemMessage(Component.literal("Thoridrop: no participaste en el combate."));
-            } else if (claimedRewards.add(player.getUUID())) {
+            } else if (claimedRewards.contains(player.getUUID()) || RewardManager.hasClaimed(session.eventId(),player.getUUID())) {
+                player.sendSystemMessage(Component.literal("Thoridrop: ya recogiste tu recompensa."));
+            } else if (RewardManager.claim(session.eventId(),player.getUUID())) {
+                claimedRewards.add(player.getUUID());
                 grantRewards(player);
                 if (claimedRewards.containsAll(participants)) {
                     dropLevel.removeBlock(dropPosition, false);
