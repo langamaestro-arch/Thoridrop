@@ -112,6 +112,7 @@ public final class Thoridrop {
     private final java.util.Map<UUID, Integer> deathExperience = new java.util.HashMap<>();
     private final java.util.Map<UUID, Integer> missingMobTicks = new java.util.HashMap<>();
     private final java.util.Set<UUID> respawnPending = new java.util.HashSet<>();
+    private final java.util.Map<UUID, Integer> respawnTeleportQueue = new java.util.HashMap<>();
     private int guardianAttackTicks;
     private int towerCheckTicks;
     private int towerReinforcements;
@@ -289,6 +290,42 @@ public final class Thoridrop {
 
     @SubscribeEvent
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (!respawnTeleportQueue.isEmpty()) {
+            var iterator = respawnTeleportQueue.entrySet().iterator();
+            while (iterator.hasNext()) {
+                var pending = iterator.next();
+                if (pending.getValue() > 1) {
+                    pending.setValue(pending.getValue() - 1);
+                    continue;
+                }
+                iterator.remove();
+                if (session == null || dropLevel == null || dropPosition == null
+                        || session.phase() != DropSession.Phase.COMBAT) continue;
+                ServerPlayer player = dropLevel.getServer().getPlayerList().getPlayer(pending.getKey());
+                if (player == null) continue;
+                dropLevel.getChunkAt(dropPosition);
+                // Flames and other decorative blocks above the crate can have collision.
+                // Search for a safe nearby location instead of silently using world spawn.
+                BlockPos landing = null;
+                for (int radius = 0; radius <= 5 && landing == null; radius++) {
+                    for (int dx = -radius; dx <= radius && landing == null; dx++) {
+                        for (int dz = -radius; dz <= radius && landing == null; dz++) {
+                            BlockPos ground = dropPosition.offset(dx, 0, dz);
+                            BlockPos feet = ground.above();
+                            if (dropLevel.getBlockState(ground).getCollisionShape(dropLevel, ground).isEmpty()) continue;
+                            if (!dropLevel.getBlockState(feet).getCollisionShape(dropLevel, feet).isEmpty()) continue;
+                            if (!dropLevel.getBlockState(feet.above()).getCollisionShape(dropLevel, feet.above()).isEmpty()) continue;
+                            landing = feet;
+                        }
+                    }
+                }
+                if (landing != null) {
+                    player.teleportTo(dropLevel, landing.getX() + 0.5, landing.getY() + 0.05,
+                        landing.getZ() + 0.5, java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+                    player.sendSystemMessage(Component.literal("Thoridrop: has reaparecido junto al suministro."));
+                }
+            }
+        }
         if (!configLoaded) loadConfig();
         if (session == null) {
             // Defensive cleanup of stale boss bars even after an interrupted event.
@@ -853,7 +890,7 @@ public final class Thoridrop {
         return session != null && session.phase() == DropSession.Phase.COMBAT
             && dropLevel != null && dropPosition != null && player.level() == dropLevel
             && player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5,
-                dropPosition.getZ() + 0.5) <= 32 * 32;
+                dropPosition.getZ() + 0.5) <= 96 * 96;
     }
 
     @SubscribeEvent
@@ -889,22 +926,9 @@ public final class Thoridrop {
         }
         Integer experience = deathExperience.remove(player.getUUID());
         if (experience != null) player.giveExperiencePoints(experience);
-        if (respawnPending.remove(player.getUUID()) && session != null && dropLevel != null
-                && dropPosition != null && session.phase() == DropSession.Phase.COMBAT) {
-            // The crate position is authoritative: respawn directly on top of it.
-            dropLevel.getChunkAt(dropPosition);
-            BlockPos feet = dropPosition.above();
-            BlockPos head = feet.above();
-            if (isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock())
-                    && dropLevel.getBlockState(feet).getCollisionShape(dropLevel, feet).isEmpty()
-                    && dropLevel.getBlockState(head).getCollisionShape(dropLevel, head).isEmpty()) {
-                player.teleportTo(dropLevel, dropPosition.getX() + 0.5, dropPosition.getY() + 1.05,
-                    dropPosition.getZ() + 0.5, java.util.Set.of(), player.getYRot(), player.getXRot(), false);
-                player.sendSystemMessage(Component.literal("Thoridrop: has reaparecido sobre el suministro con tu equipo."));
-            } else {
-                player.sendSystemMessage(Component.literal("Thoridrop: el espacio sobre el cofre está obstruido; se mantiene tu respawn normal."));
-            }
-        }
+        // Respawn event occurs during vanilla player reconstruction. Move the player
+        // on the next server tick so the vanilla respawn location cannot override it.
+        if (respawnPending.remove(player.getUUID())) respawnTeleportQueue.put(player.getUUID(), 2);
     }
 
     @SubscribeEvent
