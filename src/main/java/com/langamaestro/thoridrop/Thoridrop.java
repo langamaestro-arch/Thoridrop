@@ -544,7 +544,9 @@ public final class Thoridrop {
             }
             if (nearest != null) {
                 mob.setTarget(nearest);
-                if (session.wave() < 5 && mob.getNavigation().isDone()) {
+                // Fifth-wave guardians also need an explicit navigation request:
+                // target assignment alone does not start pathfinding for some Nicktale mobs.
+                if (mob.getNavigation().isDone() && mob.distanceToSqr(nearest) > 3.0 * 3.0) {
                     mob.getNavigation().moveTo(nearest, 1.15);
                 }
             }
