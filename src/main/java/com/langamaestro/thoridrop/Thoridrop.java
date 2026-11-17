@@ -507,19 +507,32 @@ public final class Thoridrop {
                 default -> new String[]{"ravager", "vindicator"};
             };
         };
-        // Nicktale boss types are resolved by registry ID, avoiding a hard compile-time dependency.
-        // If Nicktale is not installed, retain the original Thoridrop fifth-wave guardians.
+        // Draw one random fifth-wave opponent from the configured Nicktale rarity pool.
+        // All entity IDs are namespaced, so vanilla and Nicktale mobs can share this path.
         if (wave == 5) {
-            String nicktaleBoss = switch (session.rarity()) {
-                case COMMON -> "black_knight";
-                case RARE -> "blueflame_elder";
-                case LEGENDARY -> "cinderhorn_demon";
+            String[] pool = switch (session.rarity()) {
+                case COMMON -> new String[]{"mutant_zombie", "violet_flying_witch",
+                    "fortress_guard", "vix_eclipse_fox", "gravebreaker_brute", "don_cascabel"};
+                case RARE -> new String[]{"abyssal_shagbeast"};
+                case LEGENDARY -> new String[]{"black_knight", "cinderhorn_demon",
+                    "runebound_colossus", "armored_skeleton", "widow_of_the_well",
+                    "sultan_eternal_sands", "eclipse_colossus", "cerberus"};
             };
-            var nicktaleId = net.minecraft.resources.Identifier.fromNamespaceAndPath("nicktaleepicdungeons", nicktaleBoss);
-            var bossType = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(nicktaleId);
-            if (bossType != null) {
-                mobIds = new String[]{nicktaleBoss};
+            java.util.List<String> available = new java.util.ArrayList<>();
+            for (String id : pool) {
+                var key = net.minecraft.resources.Identifier.fromNamespaceAndPath("nicktaleepicdungeons", id);
+                if (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(key)) available.add(id);
             }
+            if (!available.isEmpty()) {
+                String chosen = available.get(dropLevel.random.nextInt(available.size()));
+                mobIds = new String[]{"nicktaleepicdungeons:" + chosen};
+                broadcast("¡Jefe final seleccionado: " + chosen.replace('_', ' ') + "!");
+            } else {
+                mobIds = new String[]{"minecraft:ravager"};
+                broadcast("No hay jefes de Nicktale registrados; usando guardián alternativo.");
+            }
+        } else {
+            for (int j = 0; j < mobIds.length; j++) mobIds[j] = "minecraft:" + mobIds[j];
         }
         for (int i = 0; i < count; i++) {
             double angle = 2 * Math.PI * i / count;
@@ -530,7 +543,7 @@ public final class Thoridrop {
                 spawn = dropPosition.above(3);
             }
             String mobId = mobIds[i % mobIds.length];
-            net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse((wave == 5 && (mobId.equals("black_knight") || mobId.equals("blueflame_elder") || mobId.equals("cinderhorn_demon")) ? "nicktaleepicdungeons:" : "minecraft:") + mobId));
+            net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse(mobId));
             if (type == null) type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager"));
             net.minecraft.world.entity.Entity entity = type.create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) entity = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
@@ -539,6 +552,19 @@ public final class Thoridrop {
             if (wave == 5 && entity instanceof net.minecraft.world.entity.LivingEntity boss) {
                 boss.setCustomName(Component.literal("✦ GUARDIÁN " + rarityName(session.rarity()) + " ✦").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
                 boss.setCustomNameVisible(true);
+                // Apply health only to the entity spawned for this Thoridrop event.
+                if (boss instanceof net.minecraft.world.entity.Mob mobBoss) {
+                    var maxHealth = mobBoss.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+                    if (maxHealth != null) {
+                        double targetHp = switch (session.rarity()) {
+                            case COMMON -> 100.0;
+                            case RARE -> 250.0;
+                            case LEGENDARY -> 450.0;
+                        };
+                        maxHealth.setBaseValue(targetHp);
+                        mobBoss.setHealth((float) targetHp);
+                    }
+                }
                 boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
                 boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 20 * 60 * 10, session.rarity() == DropSession.Rarity.LEGENDARY ? 1 : 0));
                 if (session.rarity() == DropSession.Rarity.LEGENDARY) boss.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 60 * 10, 0));
