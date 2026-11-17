@@ -1046,11 +1046,11 @@ public final class Thoridrop {
                     int bonus = flawlessDiamondBonus + (modifierType == 3 ? 2 : 0);
                     var prize = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, bonus);
                     if(!player.getInventory().add(prize) && !prize.isEmpty())
-                        player.drop(prize, false);
+                        player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(player.level(), player.getX(), player.getY(), player.getZ(), prize));
                     player.sendSystemMessage(Component.literal("✦ Desafío sin morir: +" + bonus + " diamantes."));
                 } else if (modifierType == 3) {
                     var prize = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 3);
-                    if(!player.getInventory().add(prize) && !prize.isEmpty()) player.drop(prize,false);
+                    if(!player.getInventory().add(prize) && !prize.isEmpty()) player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(player.level(), player.getX(), player.getY(), player.getZ(), prize));
                 }
                 DropStatistics.add(player.getUUID(), "claims_" + session.rarity().name().toLowerCase(java.util.Locale.ROOT));
                 if (claimedRewards.containsAll(participants)) {
