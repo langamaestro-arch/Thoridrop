@@ -71,7 +71,7 @@ public final class DropStatistics {
             +(flawless?" sin morir":"");
         java.util.List<String> records=new java.util.ArrayList<>();
         records.add(now);
-        for(String record:current.split("\\|",-1)) {
+        for(String record:current.split("\\\\|",-1)) {
             if(!record.isBlank() && records.size()<5)records.add(record);
         }
         DATA.setProperty(id+".history",String.join("|",records));
