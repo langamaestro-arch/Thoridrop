@@ -41,6 +41,8 @@ public final class Thoridrop {
     private int arrivalTimeoutTicks = 6000;
     private int availableTicks;
     private boolean automaticDrop;
+    private boolean globalAnnouncements = true, arrivalSounds = true, arrivalParticles = true;
+    private final java.util.Set<UUID> completedStats = new java.util.HashSet<>();
     private String guardianDisplayName = "GUARDIÁN";
     private int normalWeight = 60, mythicWeight = 30, legendaryWeight = 10;
 
@@ -53,6 +55,9 @@ public final class Thoridrop {
         props.setProperty("normal_weight", "60");
         props.setProperty("mythic_weight", "30");
         props.setProperty("legendary_weight", "10");
+        props.setProperty("global_announcements", "true");
+        props.setProperty("arrival_sounds", "true");
+        props.setProperty("arrival_particles", "true");
         try {
             java.nio.file.Files.createDirectories(path.getParent());
             if (java.nio.file.Files.exists(path)) {
@@ -65,11 +70,15 @@ public final class Thoridrop {
             int m = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("mythic_weight", "30"))));
             int g = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("legendary_weight", "10"))));
             if (n + m + g > 0) { normalWeight = n; mythicWeight = m; legendaryWeight = g; }
+            globalAnnouncements = Boolean.parseBoolean(props.getProperty("global_announcements", "true"));
+            arrivalSounds = Boolean.parseBoolean(props.getProperty("arrival_sounds", "true"));
+            arrivalParticles = Boolean.parseBoolean(props.getProperty("arrival_particles", "true"));
             try (var output = java.nio.file.Files.newOutputStream(path)) {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
         } catch (Exception ex) { LOGGER.error("Thoridrop config load failed", ex); }
         RewardManager.load();
+        DropStatistics.load();
         configLoaded = true;
     }
 
@@ -125,6 +134,12 @@ public final class Thoridrop {
                 .executes(context -> {
                     loadConfig();
                     context.getSource().sendSuccess(() -> Component.literal("Thoridrop config reloaded."), true);
+                    return 1;
+                }))
+            .then(Commands.literal("stats")
+                .executes(context -> {
+                    ServerPlayer player = context.getSource().getPlayerOrException();
+                    player.sendSystemMessage(Component.literal(DropStatistics.summary(player.getUUID())));
                     return 1;
                 }))
             .then(Commands.literal("status")
@@ -243,12 +258,14 @@ public final class Thoridrop {
         eventBar.setProgress(1.0f);
         claimedRewards.clear();
         participants.clear();
+        completedStats.clear();
         waveTotal = 0;
         guardianAttackTicks = 0;
         beaconLightPosition = null;
         chestOpen = false;
         chestOpeningTicks = -1;
         player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
+        if (globalAnnouncements) broadcast("Suministro " + rarityName(rarity) + " en X=" + pos.getX() + " Z=" + pos.getZ() + " | " + (arrivalTimeoutTicks / 20) + " segundos para llegar.");
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
@@ -282,8 +299,8 @@ public final class Thoridrop {
                     automaticDrop = true;
                     try { createDrop(target, rarity); } finally { automaticDrop = false; }
                     if (session != null) {
-                        broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
-                        for (ServerPlayer online : server.getPlayerList().getPlayers()) online.level().playSound(null, online.blockPosition(), net.minecraft.sounds.SoundEvents.RAID_HORN.value(), net.minecraft.sounds.SoundSource.MASTER, 0.8f, 1.0f);
+                        if (globalAnnouncements) broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
+                        if (arrivalSounds) for (ServerPlayer online : server.getPlayerList().getPlayers()) online.level().playSound(null, online.blockPosition(), net.minecraft.sounds.SoundEvents.RAID_HORN.value(), net.minecraft.sounds.SoundSource.MASTER, 0.8f, 1.0f);
                     }
                 }
             }
@@ -340,7 +357,8 @@ public final class Thoridrop {
                     }
                 }
                 if (session.phase() == DropSession.Phase.REWARDS) {
-                    broadcast("¡Cinco oleadas completadas! Los participantes pueden recoger su recompensa.");
+                    for (UUID id : participants) if (completedStats.add(id)) DropStatistics.add(id, "wins");
+                    if (globalAnnouncements) broadcast("¡Cinco oleadas completadas! Los participantes pueden recoger su recompensa.");
                 }
             }
         }
@@ -819,6 +837,7 @@ public final class Thoridrop {
             saved.add(player.getInventory().getItem(i).copy());
         }
         deathInventories.put(id, saved);
+        DropStatistics.add(id, "deaths");
         respawnPending.add(id);
         deathExperience.put(id, player.totalExperience);
         player.sendSystemMessage(Component.literal("Thoridrop: conservarás tu inventario y reaparecerás junto al suministro."));
@@ -877,6 +896,7 @@ public final class Thoridrop {
             } else if (RewardManager.claim(session.eventId(),player.getUUID())) {
                 claimedRewards.add(player.getUUID());
                 grantRewards(player);
+                DropStatistics.add(player.getUUID(), "claims");
                 if (claimedRewards.containsAll(participants)) {
                     dropLevel.removeBlock(dropPosition, false);
                     removeBeaconLight();
