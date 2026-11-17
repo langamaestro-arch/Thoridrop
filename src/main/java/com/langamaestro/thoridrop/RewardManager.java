@@ -25,7 +25,7 @@ public final class RewardManager {
 
     public static void load() {
         Properties p = new Properties();
-        p.setProperty("normal","minecraft:iron_ingot,4,8,100;minecraft:bread,8,16,100;minecraft:iron_sword,1,1,65;minecraft:emerald,1,3,35;thoridrop:supply_fragment,1,2,100");
+        p.setProperty("normal","minecraft:iron_ingot,4,8,100;minecraft:bread,8,16,100;minecraft:iron_sword,1,1,65;minecraft:iron_chestplate,1,1,35;minecraft:iron_pickaxe,1,1,45;minecraft:iron_axe,1,1,35;minecraft:iron_helmet,1,1,25;minecraft:iron_leggings,1,1,25;minecraft:iron_boots,1,1,25;minecraft:emerald,1,3,35;thoridrop:supply_fragment,1,2,100");
         p.setProperty("mythic","minecraft:diamond,4,8,100;minecraft:golden_apple,2,4,100;minecraft:experience_bottle,12,24,100;minecraft:diamond_sword,1,1,60;minecraft:diamond_chestplate,1,1,45;minecraft:diamond_pickaxe,1,1,45;thoridrop:supply_fragment,4,7,100;thoridrop:victory_trophy,1,1,25");
         p.setProperty("legendary","minecraft:diamond,10,16,100;minecraft:enchanted_golden_apple,1,2,80;minecraft:netherite_scrap,2,4,100;minecraft:experience_bottle,24,48,100;minecraft:netherite_sword,1,1,70;minecraft:netherite_chestplate,1,1,65;minecraft:netherite_pickaxe,1,1,65;minecraft:netherite_helmet,1,1,45;minecraft:netherite_leggings,1,1,45;minecraft:netherite_boots,1,1,45;thoridrop:supply_fragment,8,12,100;thoridrop:victory_trophy,1,1,100");
         try {
