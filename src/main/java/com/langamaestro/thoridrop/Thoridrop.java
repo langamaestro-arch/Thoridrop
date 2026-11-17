@@ -41,6 +41,7 @@ public final class Thoridrop {
     private int arrivalTimeoutTicks = 6000;
     private int availableTicks;
     private boolean automaticDrop;
+    private String guardianDisplayName = "GUARDIÁN";
 
     private void loadConfig() {
         java.nio.file.Path path = java.nio.file.Paths.get("config", "thoridrop.properties");
@@ -217,6 +218,7 @@ public final class Thoridrop {
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
         availableTicks = 0;
+        guardianDisplayName = "GUARDIÁN";
         clearHud();
         eventBar = new net.minecraft.server.level.ServerBossEvent(
             UUID.randomUUID(), Component.literal("✦ THORIDROP  •  " + rarityName(rarity)),
@@ -377,11 +379,11 @@ public final class Thoridrop {
                 bar.setName(Component.literal("✦ THORIDROP  ").withStyle(net.minecraft.ChatFormatting.GOLD, net.minecraft.ChatFormatting.BOLD)
                     .append(Component.literal(rarityName(session.rarity()) + "  ").withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD))
                     .append(Component.literal(compass.toString()).withStyle(net.minecraft.ChatFormatting.AQUA, net.minecraft.ChatFormatting.BOLD))
-                    .append(Component.literal("  " + distance + "m  ").withStyle(net.minecraft.ChatFormatting.YELLOW))
+                    .append(Component.literal("  " + distance + "m  " + (availableTicks >= 0 ? "⏳ " + Math.max(0, (arrivalTimeoutTicks - availableTicks + 19) / 20) + "s  " : "✓ LOCALIZADO  ")).withStyle(net.minecraft.ChatFormatting.YELLOW))
                     .append(Component.literal(aligned ? "◆ OBJETIVO ENFRENTE ◆" : delta > 0 ? "◀ GIRA A LA DERECHA" : "GIRA A LA IZQUIERDA ▶")
                         .withStyle(aligned ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.WHITE, net.minecraft.ChatFormatting.BOLD))
                     );
-                bar.setProgress(Math.max(0.05f, Math.min(1.0f, 1.0f - distance / 250.0f)));
+                bar.setProgress(availableTicks >= 0 ? Math.max(0.0f, Math.min(1.0f, (float)(arrivalTimeoutTicks - availableTicks) / arrivalTimeoutTicks)) : 1.0f);
             }
             for (UUID id : java.util.List.copyOf(locatorBars.keySet())) {
                 boolean present = dropLevel.players().stream().anyMatch(p -> p.getUUID().equals(id));
@@ -420,7 +422,7 @@ public final class Thoridrop {
                 hideNicktaleBossBars(living);
                 eventBar.setProgress(Math.max(0.0f, Math.min(1.0f, living.getHealth() / living.getMaxHealth())));
                 eventBar.setName(Component.literal("✦ THORIDROP  " + rarityName(session.rarity())
-                    + "  ◆  GUARDIÁN " + Math.round(living.getHealth()) + "/" + Math.round(living.getMaxHealth()) + " HP")
+                    + "  ◆  " + guardianDisplayName + " " + Math.round(living.getHealth()) + "/" + Math.round(living.getMaxHealth()) + " HP")
                     .withStyle(rarityColor(session.rarity()), net.minecraft.ChatFormatting.BOLD));
                 return;
             }
@@ -666,9 +668,11 @@ public final class Thoridrop {
             if (!available.isEmpty()) {
                 String chosen = available.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(available.size()));
                 mobIds = new String[]{"nicktaleepicdungeons:" + chosen};
+                guardianDisplayName = chosen.replace('_', ' ').toUpperCase(java.util.Locale.ROOT);
                 broadcast("¡Jefe final seleccionado: " + chosen.replace('_', ' ') + "!");
             } else {
                 mobIds = new String[]{"minecraft:ravager"};
+                guardianDisplayName = "RAVAGER";
                 broadcast("No hay jefes de Nicktale registrados; usando guardián alternativo.");
             }
         } else {
