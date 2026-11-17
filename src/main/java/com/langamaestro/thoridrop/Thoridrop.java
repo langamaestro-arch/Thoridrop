@@ -35,6 +35,52 @@ public final class Thoridrop {
     private static final long AUTO_INTERVAL_TICKS = 20L * 60 * 60; // 60 minutes
     private static final int[] AUTO_RARITY_WEIGHTS = {6, 3, 1}; // Normal / Mythic / Legendary
     private int arrivalTicks;
+    private boolean configLoaded;
+    private long intervalTicks = 72000L;
+    private int spawnDistanceBlocks = 160;
+    private int arrivalTimeoutTicks = 6000;
+    private int availableTicks;
+    private boolean automaticDrop;
+
+    private void loadConfig() {
+        java.nio.file.Path path = java.nio.file.Paths.get("config", "thoridrop.properties");
+        java.util.Properties props = new java.util.Properties();
+        props.setProperty("frequency_minutes", "60");
+        props.setProperty("spawn_distance_blocks", "160");
+        props.setProperty("arrival_timeout_seconds", "300");
+        try {
+            java.nio.file.Files.createDirectories(path.getParent());
+            if (java.nio.file.Files.exists(path)) {
+                try (var input = java.nio.file.Files.newInputStream(path)) { props.load(input); }
+            }
+            intervalTicks = Math.max(1, Math.min(10080, Integer.parseInt(props.getProperty("frequency_minutes", "60")))) * 1200L;
+            spawnDistanceBlocks = Math.max(32, Math.min(1024, Integer.parseInt(props.getProperty("spawn_distance_blocks", "160"))));
+            arrivalTimeoutTicks = Math.max(30, Math.min(7200, Integer.parseInt(props.getProperty("arrival_timeout_seconds", "300")))) * 20;
+            try (var output = java.nio.file.Files.newOutputStream(path)) {
+                props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
+            }
+        } catch (Exception ex) { LOGGER.error("Thoridrop config load failed", ex); }
+        configLoaded = true;
+    }
+
+    private void expireUnclaimedDrop() {
+        if (dropLevel == null || dropPosition == null || session == null) return;
+        if (isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock())) dropLevel.removeBlock(dropPosition, false);
+        for (UUID id : waveMobs) {
+            var mob = dropLevel.getEntity(id);
+            if (mob != null) mob.discard();
+        }
+        waveMobs.clear();
+        removeBeaconLight();
+        clearHud();
+        broadcast("El suministro ha desaparecido: nadie llego a tiempo.");
+        session.finish();
+        session = null;
+        dropLevel = null;
+        dropPosition = null;
+        arrivalTicks = 0;
+    }
+
     private Block arrivingCrate;
     private net.minecraft.server.level.ServerBossEvent eventBar;
     private final java.util.Map<UUID, net.minecraft.server.level.ServerBossEvent> locatorBars = new java.util.HashMap<>();
@@ -61,6 +107,13 @@ public final class Thoridrop {
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("thoridrop")
+            .then(Commands.literal("reload")
+                .requires(source -> source.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN))
+                .executes(context -> {
+                    loadConfig();
+                    context.getSource().sendSuccess(() -> Component.literal("Thoridrop config reloaded."), true);
+                    return 1;
+                }))
             .then(Commands.literal("status")
                 .executes(context -> {
                     String message = session == null
@@ -134,6 +187,13 @@ public final class Thoridrop {
         }
         ServerLevel level = player.level();
         BlockPos pos = player.blockPosition().offset(3, 0, 0);
+        if (automaticDrop) {
+            double angle = Math.toRadians(net.minecraft.util.RandomSource.create().nextInt(360));
+            int x = player.blockPosition().getX() + (int) Math.round(Math.cos(angle) * spawnDistanceBlocks);
+            int z = player.blockPosition().getZ() + (int) Math.round(Math.sin(angle) * spawnDistanceBlocks);
+            pos = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                new BlockPos(x, player.blockPosition().getY(), z));
+        }
         for (int dy = 0; dy <= 5; dy++) {
             BlockPos candidate = pos.above(dy);
             if (level.getBlockState(candidate).isAir() && level.getBlockState(candidate.above()).isAir()) {
@@ -156,6 +216,7 @@ public final class Thoridrop {
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
+        availableTicks = 0;
         clearHud();
         eventBar = new net.minecraft.server.level.ServerBossEvent(
             UUID.randomUUID(), Component.literal("✦ THORIDROP  •  " + rarityName(rarity)),
@@ -191,10 +252,11 @@ public final class Thoridrop {
 
     @SubscribeEvent
     public void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (!configLoaded) loadConfig();
         if (session == null) {
             // Defensive cleanup of stale boss bars even after an interrupted event.
             if (eventBar != null || !locatorBars.isEmpty()) clearHud();
-            if (++automaticTicks >= AUTO_INTERVAL_TICKS) {
+            if (++automaticTicks >= intervalTicks) {
                 automaticTicks = 0;
                 var server = event.getServer();
                 var players = server.getPlayerList().getPlayers();
@@ -205,7 +267,8 @@ public final class Thoridrop {
                         case 1, 2, 3 -> DropSession.Rarity.RARE;
                         default -> DropSession.Rarity.COMMON;
                     };
-                    createDrop(target, rarity);
+                    automaticDrop = true;
+                    try { createDrop(target, rarity); } finally { automaticDrop = false; }
                     if (session != null) {
                         broadcast("¡Suministro automático " + rarityName(rarity) + " detectado! Usa el localizador superior.");
                         for (ServerPlayer online : server.getPlayerList().getPlayers()) online.level().playSound(null, online.blockPosition(), net.minecraft.sounds.SoundEvents.RAID_HORN.value(), net.minecraft.sounds.SoundSource.MASTER, 0.8f, 1.0f);
@@ -215,6 +278,16 @@ public final class Thoridrop {
             return;
         }
         if (dropLevel == null || dropPosition == null) return;
+        if (session.phase() == DropSession.Phase.AVAILABLE) {
+            boolean reached = dropLevel.players().stream().anyMatch(p -> !p.isSpectator()
+                && p.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5,
+                    dropPosition.getZ() + 0.5) <= 64.0);
+            if (reached) availableTicks = -1;
+            if (availableTicks >= 0 && ++availableTicks >= arrivalTimeoutTicks) {
+                expireUnclaimedDrop();
+                return;
+            }
+        }
         if (arrivalTicks > 0) {
             tickArrival();
             return;
