@@ -36,7 +36,7 @@ public final class ThoridropMenuNetwork {
         registrar.playToServer(MenuRequest.TYPE, MenuRequest.CODEC, (packet, context) -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
             int action=packet.action();
-            if(action >= 1 && action <= 4) {
+            if(action >= 1 && action <= 12) {
                 Thoridrop mod=Thoridrop.instance();
                 if(mod != null) mod.menuPurchase(player, action);
             } else if(action != 0) return;
@@ -66,9 +66,11 @@ public final class ThoridropMenuNetwork {
          .append(DropStatistics.value(id,"timed_wins")).append(",")
          .append(DropStatistics.value(id,"special_wins")).append(",")
          .append(DropStatistics.value(id,"events_started")).append("\n");
-        s.append(DropStatistics.leaderboard("wins",10)).append("\n");
-        s.append(DropStatistics.leaderboard("wins_legendary",10)).append("\n");
-        s.append(DropStatistics.leaderboard("flawless",10)).append("\n");
+        // Four pages per ranking, six entries per page, plus personal history.
+        for(String field : new String[]{"wins","wins_legendary","flawless"})
+            for(int page=0;page<4;page++)
+                s.append(DropStatistics.rankingPage(field,page,6)).append("\n");
+        s.append(DropStatistics.history(id)).append("\n");
         PacketDistributor.sendToPlayer(player, new MenuSnapshot(s.toString()));
     }
 }
