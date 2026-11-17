@@ -42,6 +42,7 @@ public final class Thoridrop {
     private int availableTicks;
     private boolean automaticDrop;
     private String guardianDisplayName = "GUARDIÁN";
+    private int normalWeight = 60, mythicWeight = 30, legendaryWeight = 10;
 
     private void loadConfig() {
         java.nio.file.Path path = java.nio.file.Paths.get("config", "thoridrop.properties");
@@ -49,6 +50,9 @@ public final class Thoridrop {
         props.setProperty("frequency_minutes", "60");
         props.setProperty("spawn_distance_blocks", "160");
         props.setProperty("arrival_timeout_seconds", "300");
+        props.setProperty("normal_weight", "60");
+        props.setProperty("mythic_weight", "30");
+        props.setProperty("legendary_weight", "10");
         try {
             java.nio.file.Files.createDirectories(path.getParent());
             if (java.nio.file.Files.exists(path)) {
@@ -57,6 +61,10 @@ public final class Thoridrop {
             intervalTicks = Math.max(1, Math.min(10080, Integer.parseInt(props.getProperty("frequency_minutes", "60")))) * 1200L;
             spawnDistanceBlocks = Math.max(32, Math.min(1024, Integer.parseInt(props.getProperty("spawn_distance_blocks", "160"))));
             arrivalTimeoutTicks = Math.max(30, Math.min(7200, Integer.parseInt(props.getProperty("arrival_timeout_seconds", "300")))) * 20;
+            int n = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("normal_weight", "60"))));
+            int m = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("mythic_weight", "30"))));
+            int g = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("legendary_weight", "10"))));
+            if (n + m + g > 0) { normalWeight = n; mythicWeight = m; legendaryWeight = g; }
             try (var output = java.nio.file.Files.newOutputStream(path)) {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
@@ -264,11 +272,9 @@ public final class Thoridrop {
                 var players = server.getPlayerList().getPlayers();
                 if (!players.isEmpty()) {
                     ServerPlayer target = players.get(net.minecraft.util.RandomSource.create().nextInt(players.size()));
-                    DropSession.Rarity rarity = switch (net.minecraft.util.RandomSource.create().nextInt(10)) {
-                        case 0 -> DropSession.Rarity.LEGENDARY;
-                        case 1, 2, 3 -> DropSession.Rarity.RARE;
-                        default -> DropSession.Rarity.COMMON;
-                    };
+                    int roll = net.minecraft.util.RandomSource.create().nextInt(normalWeight + mythicWeight + legendaryWeight);
+                    DropSession.Rarity rarity = roll < normalWeight ? DropSession.Rarity.COMMON
+                        : roll < normalWeight + mythicWeight ? DropSession.Rarity.RARE : DropSession.Rarity.LEGENDARY;
                     automaticDrop = true;
                     try { createDrop(target, rarity); } finally { automaticDrop = false; }
                     if (session != null) {
