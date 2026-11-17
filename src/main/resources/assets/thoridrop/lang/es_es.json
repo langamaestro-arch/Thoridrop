@@ -1,1 +1,6 @@
-{"item.thoridrop.supply_fragment":"Fragmento de suministro","item.thoridrop.victory_trophy":"Trofeo de victoria"}
+{
+  "item.thoridrop.supply_fragment": "Fragmento de suministro",
+  "item.thoridrop.victory_trophy": "Trofeo de victoria",
+  "key.thoridrop.open_menu": "Abrir menú de Thoridrop",
+  "key.category.thoridrop.menu": "Thoridrop"
+}
