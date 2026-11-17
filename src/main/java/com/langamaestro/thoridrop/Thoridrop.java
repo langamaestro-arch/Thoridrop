@@ -41,6 +41,8 @@ public final class Thoridrop {
     private int arrivalTimeoutTicks = 6000;
     private int availableTicks;
     private boolean automaticDrop;
+    private int specialEventChance = 10;
+    private boolean specialEvent;
     private boolean globalAnnouncements = true, arrivalSounds = true, arrivalParticles = true;
     private final java.util.Set<UUID> completedStats = new java.util.HashSet<>();
     private String guardianDisplayName = "GUARDIÁN";
@@ -58,6 +60,7 @@ public final class Thoridrop {
         props.setProperty("global_announcements", "true");
         props.setProperty("arrival_sounds", "true");
         props.setProperty("arrival_particles", "true");
+        props.setProperty("special_event_chance_percent", "10");
         try {
             java.nio.file.Files.createDirectories(path.getParent());
             if (java.nio.file.Files.exists(path)) {
@@ -73,6 +76,7 @@ public final class Thoridrop {
             globalAnnouncements = Boolean.parseBoolean(props.getProperty("global_announcements", "true"));
             arrivalSounds = Boolean.parseBoolean(props.getProperty("arrival_sounds", "true"));
             arrivalParticles = Boolean.parseBoolean(props.getProperty("arrival_particles", "true"));
+            specialEventChance = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("special_event_chance_percent", "10"))));
             try (var output = java.nio.file.Files.newOutputStream(path)) {
                 props.store(output, "Thoridrop server settings; use /thoridrop reload to apply changes");
             }
@@ -244,6 +248,7 @@ public final class Thoridrop {
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
+        specialEvent = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < specialEventChance;
         availableTicks = 0;
         guardianDisplayName = "GUARDIÁN";
         clearHud();
@@ -265,6 +270,7 @@ public final class Thoridrop {
         chestOpen = false;
         chestOpeningTicks = -1;
         player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
+        if (specialEvent) broadcast("¡SUMINISTRO EXTRAORDINARIO! Recompensas adicionales al completar el evento.");
         if (globalAnnouncements) broadcast("Suministro " + rarityName(rarity) + " en X=" + pos.getX() + " Z=" + pos.getZ() + " | " + (arrivalTimeoutTicks / 20) + " segundos para llegar.");
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
@@ -665,6 +671,12 @@ public final class Thoridrop {
 
     private void grantRewards(ServerPlayer player) {
         RewardManager.give(player,session.rarity());
+        if (specialEvent) {
+            int bonus = switch (session.rarity()) {case COMMON -> 2; case RARE -> 4; case LEGENDARY -> 8;};
+            net.minecraft.world.item.ItemStack extra = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, bonus);
+            if (!player.getInventory().add(extra) && !extra.isEmpty()) player.drop(extra, false);
+            player.sendSystemMessage(Component.literal("Recompensa extraordinaria: +" + bonus + " diamantes."));
+        }
         player.level().playSound(null,player.blockPosition(),net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP,
             net.minecraft.sounds.SoundSource.PLAYERS,0.8f,1.2f);
     }
@@ -721,7 +733,7 @@ public final class Thoridrop {
             String[] pool = switch (session.rarity()) {
                 case COMMON -> new String[]{"mutant_zombie", "violet_flying_witch",
                     "fortress_guard", "vix_eclipse_fox"};
-                case RARE -> new String[]{"abyssal_shagbeast", "gravebreaker_brute", "don_cascabel", "blueflame_elder", "buried_axe_knight", "voidborne_lich"};
+                case RARE -> new String[]{"gravebreaker_brute", "don_cascabel", "blueflame_elder", "buried_axe_knight", "voidborne_lich"};
                 case LEGENDARY -> new String[]{"black_knight", "cinderhorn_demon",
                     "runebound_colossus", "armored_skeleton", "widow_of_the_well",
                     "sultan_eternal_sands", "eclipse_colossus", "cerberus"};
