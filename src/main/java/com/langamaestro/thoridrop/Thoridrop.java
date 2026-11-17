@@ -383,7 +383,7 @@ public final class Thoridrop {
                 case LEGENDARY -> net.minecraft.core.particles.ParticleTypes.FLAME;
             };
             for (int height = 0; height < 32; height += 2) {
-                dropLevel.sendParticles(beaconParticle, bx, by + height, bz, 5, 0.12, 0.25, 0.12, 0.005);
+                if (arrivalParticles) dropLevel.sendParticles(beaconParticle, bx, by + height, bz, 5, 0.12, 0.25, 0.12, 0.005);
                 dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD, bx, by + height, bz, 1, 0.06, 0.20, 0.06, 0.001);
             }
         }
