@@ -7,7 +7,20 @@ import java.util.*;
 public final class ThoridropCheckpoint {
     private static final Path FILE=Paths.get("config","thoridrop-active-event.properties");
     public record Snapshot(UUID id,String dimension,int x,int y,int z,
-                           DropSession.Rarity rarity,String phase) {}
+                           DropSession.Rarity rarity,String phase,String mobs) {
+        public Snapshot(UUID id,String dimension,int x,int y,int z,
+                        DropSession.Rarity rarity,String phase) {
+            this(id,dimension,x,y,z,rarity,phase,"");
+        }
+        public java.util.List<UUID> mobIds() {
+            java.util.List<UUID> result=new java.util.ArrayList<>();
+            for(String entry:mobs.split(",")) {
+                try {result.add(UUID.fromString(entry));}
+                catch(IllegalArgumentException ignored) {}
+            }
+            return result;
+        }
+    }
     private ThoridropCheckpoint(){}
     public static synchronized void write(Snapshot snapshot) {
         Properties p=new Properties();
@@ -18,6 +31,7 @@ public final class ThoridropCheckpoint {
         p.setProperty("z",Integer.toString(snapshot.z()));
         p.setProperty("rarity",snapshot.rarity().name());
         p.setProperty("phase",snapshot.phase());
+        p.setProperty("mobs",snapshot.mobs());
         try{
             Files.createDirectories(FILE.getParent());
             Path tmp=FILE.resolveSibling(FILE.getFileName()+".tmp");
@@ -34,7 +48,7 @@ public final class ThoridropCheckpoint {
             return new Snapshot(UUID.fromString(p.getProperty("id")),
                 p.getProperty("dimension",""),Integer.parseInt(p.getProperty("x")),
                 Integer.parseInt(p.getProperty("y")),Integer.parseInt(p.getProperty("z")),
-                DropSession.Rarity.valueOf(p.getProperty("rarity")),p.getProperty("phase","AVAILABLE"));
+                DropSession.Rarity.valueOf(p.getProperty("rarity")),p.getProperty("phase","AVAILABLE"),p.getProperty("mobs",""));
         }catch(Exception e){throw new IllegalStateException("Corrupt Thoridrop event checkpoint",e);}
     }
     public static synchronized void clear() {
