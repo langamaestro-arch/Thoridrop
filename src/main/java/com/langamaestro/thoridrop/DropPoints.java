@@ -28,6 +28,7 @@ public final class DropPoints {
             Files.createDirectories(FILE.getParent());
             Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");
             try (var out = Files.newOutputStream(tmp)) { DATA.store(out, "Thoridrop player balances"); }
+            if(Files.exists(FILE))Files.copy(FILE,FILE.resolveSibling(FILE.getFileName()+".bak"),StandardCopyOption.REPLACE_EXISTING);
             try { Files.move(tmp, FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
             catch (AtomicMoveNotSupportedException ex) { Files.move(tmp, FILE, StandardCopyOption.REPLACE_EXISTING); }
         } catch (Exception ex) { throw new IllegalStateException("Cannot save Thoridrop points", ex); }
