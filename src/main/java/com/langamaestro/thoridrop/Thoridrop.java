@@ -55,6 +55,7 @@ public final class Thoridrop {
     private int combatTicks;
     private boolean checkedRecovery;
     private int emptyWaveRetries;
+    private final java.util.Set<UUID> staleRecoveredMobs=new java.util.HashSet<>();
     private int timedChallengeSeconds = 480;
     private int shopPointsNormal = 20, shopPointsMythic = 55, shopPointsLegendary = 130;
     private int cooperativeBonusPoints = 15;
@@ -292,6 +293,7 @@ public final class Thoridrop {
                     removeBeaconLight();
                     clearHud();
                     session.finish();
+                    ThoridropCheckpoint.clear();
                     session = null;
                     dropLevel = null;
                     dropPosition = null;
@@ -417,6 +419,11 @@ public final class Thoridrop {
             if(!level.dimension().toString().equals(old.dimension()))continue;
             BlockPos pos=new BlockPos(old.x(),old.y(),old.z());
             level.getChunkAt(pos);
+            staleRecoveredMobs.addAll(old.mobIds());
+            for(UUID mobId:staleRecoveredMobs) {
+                net.minecraft.world.entity.Entity mob=level.getEntity(mobId);
+                if(mob!=null)mob.discard();
+            }
             Block at=level.getBlockState(pos).getBlock();
             if(!isSupplyCrate(at)) {ThoridropCheckpoint.clear();return;}
             if(old.phase().equals("REWARDS")) {
@@ -502,6 +509,13 @@ public final class Thoridrop {
             }
         }
         if (!configLoaded) loadConfig();
+        if(!staleRecoveredMobs.isEmpty() && dropLevel!=null && locatorTicks++%20==0) {
+            staleRecoveredMobs.removeIf(id -> {
+                net.minecraft.world.entity.Entity mob=dropLevel.getEntity(id);
+                if(mob!=null) {mob.discard();return true;}
+                return false;
+            });
+        }
         if(!checkedRecovery) {
             checkedRecovery=true;
             restorePreviousChallenge(event.getServer());
@@ -1193,6 +1207,11 @@ public final class Thoridrop {
             return;
         }
         emptyWaveRetries=0;
+        ThoridropCheckpoint.write(new ThoridropCheckpoint.Snapshot(
+            session.eventId(),dropLevel.dimension().toString(),
+            dropPosition.getX(),dropPosition.getY(),dropPosition.getZ(),
+            session.rarity(),"COMBAT",
+            String.join(",",waveMobs.stream().map(UUID::toString).toList())));
         waveTotal = waveMobs.size();
         session.setWaveEnemyCount(waveTotal);
         broadcast("THORIDROP - Wave " + wave + "/5: " + waveMobs.size() + " enemies!");
@@ -1326,6 +1345,7 @@ public final class Thoridrop {
                     broadcast("Todos los participantes han recogido sus recompensas. El suministro ha desaparecido.");
                     clearHud();
                     session.finish();
+                    ThoridropCheckpoint.clear();
                     session = null;
                     dropLevel = null;
                     dropPosition = null;
