@@ -56,6 +56,7 @@ public final class Thoridrop {
     private boolean checkedRecovery;
     private int emptyWaveRetries;
     private final java.util.Set<UUID> staleRecoveredMobs=new java.util.HashSet<>();
+    private int staleCleanupTicks;
     private int timedChallengeSeconds = 480;
     private int shopPointsNormal = 20, shopPointsMythic = 55, shopPointsLegendary = 130;
     private int cooperativeBonusPoints = 15;
@@ -509,7 +510,7 @@ public final class Thoridrop {
             }
         }
         if (!configLoaded) loadConfig();
-        if(!staleRecoveredMobs.isEmpty() && dropLevel!=null && locatorTicks++%20==0) {
+        if(!staleRecoveredMobs.isEmpty() && dropLevel!=null && ++staleCleanupTicks%20==0) {
             staleRecoveredMobs.removeIf(id -> {
                 net.minecraft.world.entity.Entity mob=dropLevel.getEntity(id);
                 if(mob!=null) {mob.discard();return true;}
