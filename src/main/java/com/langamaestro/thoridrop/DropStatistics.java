@@ -85,6 +85,7 @@ public final class DropStatistics {
             Path tmp=FILE.resolveSibling(FILE.getFileName()+".tmp");
             Files.createDirectories(FILE.getParent());
             try(var out=Files.newOutputStream(tmp)){DATA.store(out,"Thoridrop player statistics");}
+            if(Files.exists(FILE))Files.copy(FILE,FILE.resolveSibling(FILE.getFileName()+".bak"),StandardCopyOption.REPLACE_EXISTING);
             try{Files.move(tmp,FILE,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
             catch(AtomicMoveNotSupportedException e){Files.move(tmp,FILE,StandardCopyOption.REPLACE_EXISTING);}
         }catch(Exception e){throw new IllegalStateException("Cannot save Thoridrop statistics",e);}
