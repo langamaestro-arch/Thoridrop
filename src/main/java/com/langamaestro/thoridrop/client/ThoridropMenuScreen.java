@@ -251,14 +251,17 @@ public final class ThoridropMenuScreen extends Screen {
             case 6 -> {
                 line(gfx,"COLECCIÓN DE EQUIPO EXCLUSIVO",cx,cy,GOLD);
                 String raw=rows().length>17?rows()[17]:"Sin piezas registradas";
-                String[] pieces=raw.split(" \\| ");
-                for(int i=0;i<pieces.length;i++) {
-                    int py=cy+29+i*48;
-                    gfx.fill(cx-4,py-5,x+w-12,py+34,INNER);
-                    gfx.item(new ItemStack(i==0?Items.DIAMOND_AXE:Items.NETHERITE_AXE),cx+5,py+5);
+                String[] pieces=raw.split("\\|");
+                net.minecraft.world.item.Item[] icons={
+                    Items.DIAMOND_AXE,Items.DIAMOND_SWORD,Items.DIAMOND_PICKAXE,
+                    Items.NETHERITE_AXE,Items.NETHERITE_SWORD,Items.NETHERITE_CHESTPLATE};
+                for(int i=0;i<Math.min(6,pieces.length);i++) {
+                    int py=cy+25+i*33;
+                    gfx.fill(cx-4,py-4,x+w-12,py+27,INNER);
+                    gfx.item(new ItemStack(icons[i]),cx+5,py+3);
                     line(gfx,pieces[i],cx+32,py+9,WHITE);
                 }
-                line(gfx,"Recompensas exclusivas: mítico y legendario",cx,cy+155,MUTED);
+                line(gfx,"Piezas míticas y legendarias únicas",cx,cy+230,MUTED);
             }
             default -> {
                 line(gfx,"INFORMACIÓN Y AYUDA",cx,cy,GOLD);
