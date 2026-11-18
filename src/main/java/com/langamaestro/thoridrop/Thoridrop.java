@@ -1011,17 +1011,44 @@ public final class Thoridrop {
         };
         if (player.getRandom().nextInt(100) < chance) {
             boolean legendary = session.rarity() == DropSession.Rarity.LEGENDARY;
-            var item = legendary ? net.minecraft.world.item.Items.NETHERITE_AXE : net.minecraft.world.item.Items.DIAMOND_AXE;
+            int variant = player.getRandom().nextInt(3);
+            net.minecraft.world.item.Item item = legendary ? switch(variant) {
+                case 0 -> net.minecraft.world.item.Items.NETHERITE_AXE;
+                case 1 -> net.minecraft.world.item.Items.NETHERITE_SWORD;
+                default -> net.minecraft.world.item.Items.NETHERITE_CHESTPLATE;
+            } : switch(variant) {
+                case 0 -> net.minecraft.world.item.Items.DIAMOND_AXE;
+                case 1 -> net.minecraft.world.item.Items.DIAMOND_SWORD;
+                default -> net.minecraft.world.item.Items.DIAMOND_PICKAXE;
+            };
+            String collectionKey = legendary ? switch(variant) {
+                case 0 -> "legendary_axe";
+                case 1 -> "legendary_blade";
+                default -> "legendary_armor";
+            } : switch(variant) {
+                case 0 -> "mythic_axe";
+                case 1 -> "mythic_blade";
+                default -> "mythic_tool";
+            };
+            String name = legendary ? switch(variant) {
+                case 0 -> "Hacha de la Tormenta";
+                case 1 -> "Espada del Caballero Negro";
+                default -> "Coraza del Guardián";
+            } : switch(variant) {
+                case 0 -> "Hacha mítica Thoridrop";
+                case 1 -> "Espada del Desafiante";
+                default -> "Pico del Explorador";
+            };
             var exclusive = new net.minecraft.world.item.ItemStack(item);
             exclusive = net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
                 player.getRandom(), exclusive, legendary ? 50 : 28,
                 player.level().registryAccess(), java.util.Optional.empty());
             exclusive.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
-                Component.literal(legendary ? "§6✦ Hacha legendaria Thoridrop" : "§d✦ Hacha mítica Thoridrop"));
+                Component.literal((legendary ? "§6✦ " : "§d✦ ")+name));
             if(!player.getInventory().add(exclusive) && !exclusive.isEmpty())
                 player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
                     player.level(),player.getX(),player.getY(),player.getZ(),exclusive));
-            ThoridropProgression.collect(player.getUUID(),legendary?"legendary_axe":"mythic_axe");
+            ThoridropProgression.collect(player.getUUID(),collectionKey);
             player.sendSystemMessage(Component.literal("§6✦ ¡Recompensa exclusiva de Thoridrop!"));
         }
         if (specialEvent) {
