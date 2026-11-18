@@ -146,6 +146,7 @@ public final class Thoridrop {
         RewardManager.load();
         DropStatistics.load();
         DropPoints.load();
+        ThoridropProgression.load();
         configLoaded = true;
     }
 
@@ -553,6 +554,8 @@ public final class Thoridrop {
                     for (UUID id : participants) if (completedStats.add(id)) {
                         DropStatistics.add(id, "wins");
                         DropStatistics.bestTime(id, combatTicks);
+                        ThoridropProgression.onVictory(id,session.rarity(),
+                            eventKills.getOrDefault(id,0),!eventDeaths.contains(id));
                         DropStatistics.recordHistory(id,session.rarity().name(),
                             combatTicks/20,eventHits.getOrDefault(id,0),
                             eventKills.getOrDefault(id,0),teamSizeAtVictory,!eventDeaths.contains(id));
@@ -904,7 +907,11 @@ public final class Thoridrop {
 
     /** Server-owned catalogue shared with the menu and legacy commands. */
     void menuPurchase(ServerPlayer player,int offerId) {
-        ThoridropShop.buy(player,offerId);
+        if(offerId==20) {
+            ThoridropProgression.prestige(player);
+        } else if(offerId>=1 && offerId<=12) {
+            ThoridropShop.buy(player,offerId);
+        }
     }
 
     private int buyShopItem(ServerPlayer player,String sku,int ignoredCost) {
@@ -935,6 +942,7 @@ public final class Thoridrop {
             if(!player.getInventory().add(exclusive) && !exclusive.isEmpty())
                 player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
                     player.level(),player.getX(),player.getY(),player.getZ(),exclusive));
+            ThoridropProgression.collect(player.getUUID(),legendary?"legendary_axe":"mythic_axe");
             player.sendSystemMessage(Component.literal("§6✦ ¡Recompensa exclusiva de Thoridrop!"));
         }
         if (specialEvent) {
@@ -1219,6 +1227,10 @@ public final class Thoridrop {
                 if(specialEvent) earned += specialBonusPoints;
                 if(timedChallengeSucceeded) earned += 25;
                 DropPoints.earn(player.getUUID(),earned);
+                // Mission payouts are independent of shop balances and one-time per period.
+                int missionBonus=ThoridropProgression.claimMissions(player.getUUID());
+                if(missionBonus>0)player.sendSystemMessage(Component.literal(
+                    "§6✦ Misiones completadas: +"+missionBonus+" puntos"));
                 player.sendSystemMessage(Component.literal("§6+ "+earned+" puntos Thoridrop§r | Saldo: "+DropPoints.balance(player.getUUID())));
                 int damage = eventHits.getOrDefault(player.getUUID(),0);
                 int best = eventHits.values().stream().mapToInt(Integer::intValue).max().orElse(0);
