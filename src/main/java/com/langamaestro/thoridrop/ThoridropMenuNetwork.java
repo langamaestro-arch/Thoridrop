@@ -36,7 +36,7 @@ public final class ThoridropMenuNetwork {
         registrar.playToServer(MenuRequest.TYPE, MenuRequest.CODEC, (packet, context) -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
             int action=packet.action();
-            if(action >= 1 && action <= 12) {
+            if((action >= 1 && action <= 12) || action == 20) {
                 Thoridrop mod=Thoridrop.instance();
                 if(mod != null) mod.menuPurchase(player, action);
             } else if(action != 0) return;
@@ -71,6 +71,12 @@ public final class ThoridropMenuNetwork {
             for(int page=0;page<4;page++)
                 s.append(DropStatistics.rankingPage(field,page,6)).append("\n");
         s.append(DropStatistics.history(id)).append("\n");
+        s.append(ThoridropProgression.level(id)).append(",")
+         .append(ThoridropProgression.xp(id)).append(",")
+         .append(ThoridropProgression.prestige(id)).append(",")
+         .append(ThoridropProgression.title(id)).append("\n");
+        s.append(ThoridropProgression.missions(id)).append("\n");
+        s.append(ThoridropProgression.collection(id)).append("\n");
         PacketDistributor.sendToPlayer(player, new MenuSnapshot(s.toString()));
     }
 }
