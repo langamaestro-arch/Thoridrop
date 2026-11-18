@@ -47,7 +47,7 @@ public final class ThoridropProgression {
     private static String today() {return LocalDate.now(ZoneOffset.UTC).toString();}
     private static String week() {
         LocalDate date=LocalDate.now(ZoneOffset.UTC);
-        return date.getYear()+"-"+date.get(WeekFields.ISO.weekOfWeekBasedYear());
+        return date.get(WeekFields.ISO.weekBasedYear())+"-"+date.get(WeekFields.ISO.weekOfWeekBasedYear());
     }
     private static void rollover(UUID id) {
         String prefix=id+".";
@@ -55,15 +55,22 @@ public final class ThoridropProgression {
         if(!today.equals(STATE.getProperty(prefix+"day",""))) {
             STATE.setProperty(prefix+"day",today);
             set(id,"d_wins",0);set(id,"d_kills",0);set(id,"d_claimed",0);
+            set(id,"d_flawless",0);set(id,"d_mythic",0);
+            set(id,"d_kills_claimed",0);set(id,"d_flawless_claimed",0);set(id,"d_mythic_claimed",0);
         }
         if(!week.equals(STATE.getProperty(prefix+"week",""))) {
             STATE.setProperty(prefix+"week",week);
             set(id,"w_wins",0);set(id,"w_legendary",0);set(id,"w_claimed",0);set(id,"w_legendary_claimed",0);
+            set(id,"w_kills",0);set(id,"w_coop",0);
+            set(id,"w_kills_claimed",0);set(id,"w_coop_claimed",0);
         }
     }
-    public static synchronized void onVictory(UUID id,DropSession.Rarity rarity,
-            int enemies,boolean flawless) {
+    // Every objective is counted for the winning player, not just the owner of the crate.
+    public static synchronized void onVictory(ServerPlayer player,DropSession.Rarity rarity,
+                                               int enemies,boolean flawless,boolean cooperative) {
+        UUID id=player.getUUID();
         rollover(id);
+        int before=level(id);
         int gain=switch(rarity) {case COMMON->60;case RARE->130;case LEGENDARY->240;};
         if(flawless)gain+=30;
         set(id,"xp",Math.min(9900,read(id,"xp")+gain));
@@ -71,46 +78,128 @@ public final class ThoridropProgression {
         set(id,"w_wins",read(id,"w_wins")+1);
         if(rarity==DropSession.Rarity.LEGENDARY)
             set(id,"w_legendary",read(id,"w_legendary")+1);
-        set(id,"d_kills",read(id,"d_kills")+enemies);
+        if(rarity!=DropSession.Rarity.COMMON)
+            set(id,"d_mythic",read(id,"d_mythic")+1);
+        if(flawless)set(id,"d_flawless",read(id,"d_flawless")+1);
+        if(cooperative)set(id,"w_coop",read(id,"w_coop")+1);
+        set(id,"d_kills",read(id,"d_kills")+Math.max(0,enemies));
+        set(id,"w_kills",read(id,"w_kills")+Math.max(0,enemies));
+        int after=level(id);
+        java.util.List<Integer> rewards=new java.util.ArrayList<>();
+        for(int milestone:new int[]{5,10,20,35,50,75,100}) {
+            if(before<milestone && after>=milestone && read(id,"lv_reward_"+milestone)==0) {
+                set(id,"lv_reward_"+milestone,1);
+                rewards.add(milestone);
+            }
+        }
         save();
+        for(int milestone:rewards)giveLevelReward(player,milestone);
     }
-    /** Tasks are paid only once per UTC day/week, even after reconnect. */
+
+    private static void deliver(ServerPlayer player,net.minecraft.world.item.ItemStack prize) {
+        if(!player.getInventory().add(prize) && !prize.isEmpty())
+            player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                player.level(),player.getX(),player.getY(),player.getZ(),prize));
+    }
+
+    private static void giveLevelReward(ServerPlayer player,int milestone) {
+        net.minecraft.world.item.Item item=switch(milestone) {
+            case 5 -> net.minecraft.world.item.Items.IRON_INGOT;
+            case 10 -> net.minecraft.world.item.Items.DIAMOND;
+            case 20 -> net.minecraft.world.item.Items.GOLDEN_APPLE;
+            case 35 -> net.minecraft.world.item.Items.DIAMOND_SWORD;
+            case 50 -> net.minecraft.world.item.Items.NETHERITE_INGOT;
+            case 75 -> net.minecraft.world.item.Items.NETHERITE_CHESTPLATE;
+            default -> net.minecraft.world.item.Items.NETHER_STAR;
+        };
+        int amount=switch(milestone) {
+            case 5 -> 12;case 10 -> 4;case 20 -> 5;case 50 -> 2;default -> 1;
+        };
+        int points=switch(milestone) {
+            case 5 -> 50;case 10 -> 100;case 20 -> 200;case 35 -> 350;
+            case 50 -> 500;case 75 -> 800;default -> 1200;
+        };
+        net.minecraft.world.item.ItemStack reward=new net.minecraft.world.item.ItemStack(item,amount);
+        if(milestone==35 || milestone==75) {
+            reward=net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
+                player.getRandom(),reward,milestone==75?45:30,
+                player.level().registryAccess(),java.util.Optional.empty());
+            reward.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                Component.literal("§6✦ Recompensa de nivel "+milestone+" Thoridrop"));
+        }
+        deliver(player,reward);
+        DropPoints.earn(player.getUUID(),points);
+        player.sendSystemMessage(Component.literal("§6✦ ¡NIVEL "+milestone+"! +"+points+
+            " puntos y recompensa de progresión."));
+    }
+
+    private static int claim(UUID id,String counter,int required,String claimed,int value) {
+        if(read(id,counter)<required || read(id,claimed)>0)return 0;
+        set(id,claimed,1);
+        return value;
+    }
+
+    /** Claiming is server-side and flags are saved before payout, so reconnect cannot duplicate it. */
     public static synchronized int claimMissions(UUID id) {
         rollover(id);
         int points=0;
-        if(read(id,"d_wins")>=1 && read(id,"d_claimed")==0) {
-            set(id,"d_claimed",1);points+=15;
-        }
-        if(read(id,"w_wins")>=3 && read(id,"w_claimed")==0) {
-            set(id,"w_claimed",1);points+=60;
-        }
-        if(read(id,"w_legendary")>=1 && read(id,"w_legendary_claimed")==0) {
-            set(id,"w_legendary_claimed",1);points+=75;
-        }
-        if(points>0) {
-            save();
-            DropPoints.earn(id,points);
-        } else save();
+        points+=claim(id,"d_wins",1,"d_claimed",15);
+        points+=claim(id,"d_kills",20,"d_kills_claimed",25);
+        points+=claim(id,"d_flawless",1,"d_flawless_claimed",30);
+        points+=claim(id,"d_mythic",1,"d_mythic_claimed",40);
+        points+=claim(id,"w_wins",3,"w_claimed",60);
+        points+=claim(id,"w_legendary",1,"w_legendary_claimed",75);
+        points+=claim(id,"w_kills",70,"w_kills_claimed",100);
+        points+=claim(id,"w_coop",1,"w_coop_claimed",85);
+        save();
+        if(points>0)DropPoints.earn(id,points);
         return points;
     }
+
+    private static String mission(UUID id,String period,String title,String counter,int target,
+                                  String claimField,int points) {
+        int progress=Math.min(read(id,counter),target);
+        return period+" "+title+" "+progress+"/"+target+" ["+
+            (read(id,claimField)>0?"COBRADA":points+" pts")+"]";
+    }
+
     public static synchronized String missions(UUID id) {
         rollover(id);
-        return "Diaria 1 desafío "+read(id,"d_wins")+"/1 ["+(read(id,"d_claimed")>0?"COBRADA":"15 pts")+"]"
-            +"|Semanal 3 desafíos "+read(id,"w_wins")+"/3 ["+(read(id,"w_claimed")>0?"COBRADA":"60 pts")+"]"
-            +"|Semanal 1 legendario "+read(id,"w_legendary")+"/1 ["+(read(id,"w_legendary_claimed")>0?"COBRADA":"75 pts")+"]";
+        return String.join("|",
+            mission(id,"Diaria","1 desafío ","d_wins",1,"d_claimed",15),
+            mission(id,"Diaria","20 enemigos ","d_kills",20,"d_kills_claimed",25),
+            mission(id,"Diaria","1 sin morir ","d_flawless",1,"d_flawless_claimed",30),
+            mission(id,"Diaria","1 mítico o mejor ","d_mythic",1,"d_mythic_claimed",40),
+            mission(id,"Semanal","3 desafíos ","w_wins",3,"w_claimed",60),
+            mission(id,"Semanal","1 legendario ","w_legendary",1,"w_legendary_claimed",75),
+            mission(id,"Semanal","70 enemigos ","w_kills",70,"w_kills_claimed",100),
+            mission(id,"Semanal","1 cooperativo ","w_coop",1,"w_coop_claimed",85)
+        );
     }
+
     public static synchronized boolean prestige(ServerPlayer player) {
         UUID id=player.getUUID();
         if(level(id)<100) {
             player.sendSystemMessage(Component.literal("Thoridrop: alcanza nivel 100 antes de obtener prestigio."));
             return false;
         }
-        set(id,"prestige",read(id,"prestige")+1);
+        int rank=read(id,"prestige")+1;
+        set(id,"prestige",rank);
         set(id,"xp",0);
+        for(int milestone:new int[]{5,10,20,35,50,75,100})set(id,"lv_reward_"+milestone,0);
         save();
-        player.sendSystemMessage(Component.literal("§6✦ Prestigio Thoridrop "+prestige(id)+" desbloqueado."));
+        int points=1500;
+        DropPoints.earn(id,points);
+        net.minecraft.world.item.ItemStack emblem=new net.minecraft.world.item.ItemStack(
+            net.minecraft.world.item.Items.NETHER_STAR);
+        emblem.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+            Component.literal("§6✦ Emblema de prestigio Thoridrop "+rank));
+        deliver(player,emblem);
+        player.sendSystemMessage(Component.literal("§6✦ PRESTIGIO "+rank+
+            " desbloqueado: +"+points+" puntos y un emblema especial."));
         return true;
     }
+
     public static synchronized void collect(UUID id,String key) {
         if(!key.matches("[a-z_]{1,32}"))return;
         STATE.setProperty(id+".collection."+key,"true");
@@ -118,9 +207,13 @@ public final class ThoridropProgression {
     }
     public static synchronized String collection(UUID id) {
         String[] names={"Hacha mítica","Espada mítica","Pico mítico",
-            "Hacha legendaria","Espada legendaria","Coraza legendaria"};
+            "Arco mítico","Peto mítico","Pala mítica",
+            "Hacha legendaria","Espada legendaria","Coraza legendaria",
+            "Arco legendario","Pico legendario","Botas legendarias"};
         String[] ids={"mythic_axe","mythic_blade","mythic_tool",
-            "legendary_axe","legendary_blade","legendary_armor"};
+            "mythic_bow","mythic_armor","mythic_shovel",
+            "legendary_axe","legendary_blade","legendary_armor",
+            "legendary_bow","legendary_tool","legendary_boots"};
         StringBuilder b=new StringBuilder();
         for(int i=0;i<ids.length;i++) {
             if(i>0)b.append("|");
