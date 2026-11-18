@@ -633,12 +633,13 @@ public final class Thoridrop {
                     for (UUID id : participants) if (completedStats.add(id)) {
                         DropStatistics.add(id, "wins");
                         DropStatistics.bestTime(id, combatTicks);
-                        ThoridropProgression.onVictory(id,session.rarity(),
-                            eventKills.getOrDefault(id,0),!eventDeaths.contains(id));
+                        ServerPlayer achiever=dropLevel.getServer().getPlayerList().getPlayer(id);
+                        if(achiever!=null)ThoridropProgression.onVictory(
+                            achiever,session.rarity(),eventKills.getOrDefault(id,0),
+                            !eventDeaths.contains(id),teamSizeAtVictory>=2);
                         DropStatistics.recordHistory(id,session.rarity().name(),
                             combatTicks/20,eventHits.getOrDefault(id,0),
                             eventKills.getOrDefault(id,0),teamSizeAtVictory,!eventDeaths.contains(id));
-                        ServerPlayer achiever=dropLevel.getServer().getPlayerList().getPlayer(id);
                         if(achiever!=null)
                             ThoridropAdvancements.grantVictory(achiever,session.rarity(),
                                 DropStatistics.value(id,"wins"),!eventDeaths.contains(id),teamSizeAtVictory>=2);
@@ -1011,33 +1012,52 @@ public final class Thoridrop {
         };
         if (player.getRandom().nextInt(100) < chance) {
             boolean legendary = session.rarity() == DropSession.Rarity.LEGENDARY;
-            int variant = player.getRandom().nextInt(3);
+            // Six variants per difficulty; original six items keep the same collection keys.
+            int variant = player.getRandom().nextInt(6);
             net.minecraft.world.item.Item item = legendary ? switch(variant) {
                 case 0 -> net.minecraft.world.item.Items.NETHERITE_AXE;
                 case 1 -> net.minecraft.world.item.Items.NETHERITE_SWORD;
-                default -> net.minecraft.world.item.Items.NETHERITE_CHESTPLATE;
+                case 2 -> net.minecraft.world.item.Items.NETHERITE_CHESTPLATE;
+                case 3 -> net.minecraft.world.item.Items.BOW;
+                case 4 -> net.minecraft.world.item.Items.NETHERITE_PICKAXE;
+                default -> net.minecraft.world.item.Items.NETHERITE_BOOTS;
             } : switch(variant) {
                 case 0 -> net.minecraft.world.item.Items.DIAMOND_AXE;
                 case 1 -> net.minecraft.world.item.Items.DIAMOND_SWORD;
-                default -> net.minecraft.world.item.Items.DIAMOND_PICKAXE;
+                case 2 -> net.minecraft.world.item.Items.DIAMOND_PICKAXE;
+                case 3 -> net.minecraft.world.item.Items.BOW;
+                case 4 -> net.minecraft.world.item.Items.DIAMOND_CHESTPLATE;
+                default -> net.minecraft.world.item.Items.DIAMOND_SHOVEL;
             };
             String collectionKey = legendary ? switch(variant) {
                 case 0 -> "legendary_axe";
                 case 1 -> "legendary_blade";
-                default -> "legendary_armor";
+                case 2 -> "legendary_armor";
+                case 3 -> "legendary_bow";
+                case 4 -> "legendary_tool";
+                default -> "legendary_boots";
             } : switch(variant) {
                 case 0 -> "mythic_axe";
                 case 1 -> "mythic_blade";
-                default -> "mythic_tool";
+                case 2 -> "mythic_tool";
+                case 3 -> "mythic_bow";
+                case 4 -> "mythic_armor";
+                default -> "mythic_shovel";
             };
             String name = legendary ? switch(variant) {
                 case 0 -> "Hacha de la Tormenta";
                 case 1 -> "Espada del Caballero Negro";
-                default -> "Coraza del Guardián";
+                case 2 -> "Coraza del Guardián";
+                case 3 -> "Arco de la Tempestad";
+                case 4 -> "Pico de las Profundidades";
+                default -> "Botas del Conquistador";
             } : switch(variant) {
                 case 0 -> "Hacha mítica Thoridrop";
                 case 1 -> "Espada del Desafiante";
-                default -> "Pico del Explorador";
+                case 2 -> "Pico del Explorador";
+                case 3 -> "Arco del Cazador";
+                case 4 -> "Coraza de la Aurora";
+                default -> "Pala del Buscador";
             };
             var exclusive = new net.minecraft.world.item.ItemStack(item);
             exclusive = net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
