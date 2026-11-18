@@ -25,7 +25,18 @@ public final class ThoridropShop {
         new Offer(9,"Consumibles","Zanahorias doradas x12",380,Items.GOLDEN_CARROT,12,0),
         new Offer(10,"Materiales","Esmeraldas x12",220,Items.EMERALD,12,0),
         new Offer(11,"Herramientas","Hacha legendaria",980,Items.NETHERITE_AXE,1,40),
-        new Offer(12,"Consumibles","Flechas x64",140,Items.ARROW,64,0)
+                new Offer(12,"Consumibles","Flechas x64",140,Items.ARROW,64,0),
+        // Complete weapon, tool and armour sets by difficulty. IDs 13-20 are reserved,
+        // because action 20 already means "prestige" in the stable client protocol.
+        new Offer(21,"Armas","Normal · Espada de hierro",180,Items.IRON_SWORD,1,10),
+        new Offer(22,"Herramientas","Normal · Pico de hierro",160,Items.IRON_PICKAXE,1,10),
+        new Offer(23,"Armaduras","Normal · Peto de hierro",200,Items.IRON_CHESTPLATE,1,10),
+        new Offer(24,"Armas","Mítica · Espada de diamante",710,Items.DIAMOND_SWORD,1,30),
+        new Offer(25,"Herramientas","Mítica · Pico de diamante",680,Items.DIAMOND_PICKAXE,1,33),
+        new Offer(26,"Armaduras","Mítica · Peto de diamante",790,Items.DIAMOND_CHESTPLATE,1,33),
+        new Offer(27,"Armas","Legendaria · Espada de netherita",1450,Items.NETHERITE_SWORD,1,48),
+        new Offer(28,"Herramientas","Legendaria · Pico de netherita",1380,Items.NETHERITE_PICKAXE,1,48),
+        new Offer(29,"Armaduras","Legendaria · Peto de netherita",1600,Items.NETHERITE_CHESTPLATE,1,48)
     );
     private ThoridropShop() {}
     public static List<Offer> offers() { return OFFERS; }
