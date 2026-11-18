@@ -42,7 +42,7 @@ public final class ThoridropMenuScreen extends Screen {
     private int tab=0,marketPage=0,rankPage=0,rankMode=0,confirmId=-1;
     private int x,y,w,h,cx,cy,side,tabHeight;
     private final List<PaintButton> paintButtons=new ArrayList<>();
-    private record PaintButton(int bx,int by,int bw,int bh,String label,Item icon,boolean active) {}
+    private record PaintButton(int bx,int by,int bw,int bh,String label,Item icon,boolean active,boolean enabled) {}
     public ThoridropMenuScreen() {
         super(Minecraft.getInstance(),Minecraft.getInstance().font,Component.literal("Thoridrop"));
     }
@@ -64,10 +64,15 @@ public final class ThoridropMenuScreen extends Screen {
     private void refresh(){ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(0));}
     private void action(int n){ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(n));}
     private void addStyled(String text,int bx,int by,int bw,int bh,Item icon,boolean selected,Runnable click) {
+        addStyled(text,bx,by,bw,bh,icon,selected,true,click);
+    }
+    private void addStyled(String text,int bx,int by,int bw,int bh,Item icon,boolean selected,
+                           boolean enabled,Runnable click) {
         Button nativeButton=Button.builder(Component.literal(text),button->click.run())
             .bounds(bx,by,bw,bh).build();
+        nativeButton.active=enabled;
         addRenderableWidget(nativeButton);
-        paintButtons.add(new PaintButton(bx,by,bw,bh,text,icon,selected));
+        paintButtons.add(new PaintButton(bx,by,bw,bh,text,icon,selected,enabled));
     }
     @Override protected void init() {
         w=Math.min(width-14,620); h=Math.min(height-12,440);
@@ -78,7 +83,7 @@ public final class ThoridropMenuScreen extends Screen {
         paintButtons.clear();
         for(int i=0;i<TABS.length;i++) {
             final int selected=i;
-            addStyled(TABS[i],x+25,y+101+i*tabHeight,side-38,tabHeight-3,
+            addStyled(TABS[i],x+25,y+119+i*(tabHeight-2),side-38,tabHeight-5,
                 TAB_ITEMS[i],tab==i,()->{tab=selected;confirmId=-1;rebuildWidgets();});
         }
         addStyled("X",x+w-49,y+21,27,23,null,false,this::onClose);
@@ -100,8 +105,9 @@ public final class ThoridropMenuScreen extends Screen {
             for(int i=0;i<NAMES.length;i++) {
                 if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
                 final int id=i+1;
-                addStyled(confirmId==id?"Confirmar":"Comprar "+COST[i],
-                    x+w-121,y+191+row*51,97,22,null,confirmId==id,()->{
+                boolean affordable=balance()>=COST[i];
+                addStyled(!affordable?"Sin puntos":confirmId==id?"Confirmar":"Comprar "+COST[i],
+                    x+w-121,y+191+row*51,97,22,null,confirmId==id,affordable,()->{
                         if(confirmId!=id)confirmId=id;
                         else {confirmId=-1;action(id);}
                         rebuildWidgets();
@@ -146,8 +152,9 @@ public final class ThoridropMenuScreen extends Screen {
         line(g,"Puntos: "+balance(),x+w-185,y+36,INK);
         frame(g,x+15,y+91,x+side+7,y+h-18,PANEL);
         frame(g,x+side+17,y+91,x+w-15,y+h-18,PAPER);
-        line(g,"SECCIONES",x+31,y+84,DARK);
-        g.fill(x+30,y+94,x+side-4,y+96,GOLD);
+        // Section label lives inside the side panel, rather than crossing its top edge.
+        g.fill(x+27,y+96,x+side-3,y+98,GOLD);
+        line(g,"SECCIONES",x+34,y+99,DARK);
         // Subtle row separators and corner jewels.
         for(int i=0;i<4;i++){
             int fx=(i%2==0)?x+8:x+w-10;
@@ -156,6 +163,15 @@ public final class ThoridropMenuScreen extends Screen {
             g.fill(fx,fy,fx+2,fy+2,0xFFAC4D85);
         }
         g.fill(x+side+29,y+97,x+w-26,y+98,GOLD);
+        // Seven personal milestones: 10/25/50/100 wins, legendary, flawless and team win.
+        int[] totals=stats();
+        int achieved=(totals[0]>=10?1:0)+(totals[0]>=25?1:0)
+            +(totals[0]>=50?1:0)+(totals[0]>=100?1:0)
+            +(totals[3]>0?1:0)+(totals[6]>0?1:0)+(totals[12]>0?1:0);
+        int progressX=x+w-198,progressY=y+63,progressW=115;
+        line(g,"PROGRESO "+achieved+"/7",progressX,y+47,DARK);
+        g.fill(progressX,progressY,progressX+progressW,progressY+6,0xFFC19A71);
+        g.fill(progressX+1,progressY+1,progressX+1+(progressW-2)*achieved/7,progressY+5,GREEN);
     }
     private void section(GuiGraphicsExtractor g,String heading,Item icon){
         g.fill(cx-7,cy-17,x+w-25,cy+23,0xFFFFE1AC);
@@ -176,13 +192,13 @@ public final class ThoridropMenuScreen extends Screen {
         int l=b.bx(),t=b.by(),r=l+b.bw(),d=t+b.bh();
         g.fill(l-2,t-2,r+2,d+2,b.active()?GOLD:EDGE);
         g.fill(l-1,t-1,r+1,d+1,0xFFFFF0CA);
-        g.fill(l,t,r,d,b.active()?0xFFFFD172:hover?0xFFFFE0A0:0xFFFFEBCB);
+        g.fill(l,t,r,d,!b.enabled()?0xFFE3D4BB:b.active()?0xFFFFD172:hover?0xFFFFE0A0:0xFFFFEBCB);
         g.fill(l+2,t+2,r-2,t+4,0xFFFFF7D9);
         g.fill(l+2,d-4,r-2,d-2,0xFFE0B887);
         if(b.icon()!=null)g.item(new ItemStack(b.icon()),l+5,t+Math.max(1,(b.bh()-16)/2));
         int textX=l+(b.icon()==null?Math.max(4,(b.bw()-font.width(b.label()))/2):25);
         String label=font.plainSubstrByWidth(b.label(),b.bw()-(b.icon()==null?8:29));
-        line(g,label,textX,t+(b.bh()-8)/2,DARK);
+        line(g,label,textX,t+(b.bh()-8)/2,b.enabled()?DARK:MUTED);
     }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial) {
         decorative(g);
@@ -206,8 +222,20 @@ public final class ThoridropMenuScreen extends Screen {
                 entry(g,"Racha máxima",a[10],cx,start+159);
                 line(g,"Mejor tiempo: "+(a[11]==0?"Sin récord":a[11]/20+" s"),cx,start+173,INK);
                 entry(g,"Victorias cooperativas",a[12],cx,start+187);
-                if(rows().length>14)line(g,"Historial: "+font.plainSubstrByWidth(rows()[14].split("\\|")[0],w-side-64),
-                    cx,start+207,MUTED);
+                if(rows().length>14) {
+                    String recent=rows()[14].split("\\|")[0];
+                    line(g,"ÚLTIMO DESAFÍO",cx,start+205,GOLD);
+                    String compact=recent.replace(" jugadores"," jug.").replace(" impactos"," golpes");
+                    int maxWidth=x+w-34-cx;
+                    // Split on a word boundary; never paint outside the parchment panel.
+                    String first=font.plainSubstrByWidth(compact,maxWidth);
+                    int boundary=first.lastIndexOf(' ');
+                    if(boundary>0 && first.length()<compact.length())first=first.substring(0,boundary);
+                    line(g,first,cx,start+220,MUTED);
+                    if(first.length()<compact.length())
+                        line(g,font.plainSubstrByWidth(compact.substring(first.length()).trim(),maxWidth),
+                            cx,start+234,MUTED);
+                }
             }
             case 1 -> {
                 section(g,"LOGROS DE THORIDROP",Items.NETHER_STAR);
@@ -236,7 +264,8 @@ public final class ThoridropMenuScreen extends Screen {
                     strip(g,cx-5,yy-5,w-side-65,26,i==0);
                     line(g,font.plainSubstrByWidth(players[i],w-side-88),cx+6,yy+3,INK);
                 }
-                centered(g,"Página "+(rankPage+1)+" de 4",cx+(w-side-56)/2,y+h-72,MUTED);
+                // Page label above the navigation controls, with a single render only.
+                centered(g,"Página "+(rankPage+1)+" de 4",cx+(w-side-56)/2,y+h-75,MUTED);
             }
             case 3 -> {
                 section(g,"MERCADO DE RECOMPENSAS",Items.EMERALD);
@@ -253,24 +282,30 @@ public final class ThoridropMenuScreen extends Screen {
                     row++;
                 }
                 line(g,"Saldo: "+balance()+" · Compra con confirmación",cx,y+h-54,DARK);
+                if(java.util.stream.IntStream.range(0,NAMES.length)
+                    .anyMatch(i->GROUP[i].equals(CATEGORIES[marketPage])&&balance()<COST[i]))
+                    line(g,"Los artículos sin saldo aparecen bloqueados.",cx,y+h-40,RED);
             }
             case 4 -> {
-                section(g,"DESAFÍOS Y PROGRESO",Items.IRON_SWORD);
+                section(g,"¿CÓMO FUNCIONAN LOS DESAFÍOS?",Items.IRON_SWORD);
                 String[] lines={
-                    "Normal  ·  Mítico  ·  Legendario",
-                    "Suministros invocados: "+a[15],
-                    "Cooperativos completados: "+a[12],
-                    "Modificadores de combate:",
-                    "Horda · Velocidad · Botín extraordinario",
-                    "Élites · Contrarreloj · Oleada sorpresa",
-                    "Los jefes conservan sus habilidades",
-                    "Las cinco oleadas son obligatorias"
+                    "Los desafíos son los suministros Thoridrop.",
+                    "1. Encuentra el cofre que cae del cielo.",
+                    "2. Haz clic derecho para activar el reto.",
+                    "3. Supera las cinco oleadas de enemigos.",
+                    "4. Derrota al jefe final de la quinta oleada.",
+                    "5. Reclama equipo y puntos del cofre.",
+                    "Normal: más fácil · Mítico: intermedio.",
+                    "Legendario: más difícil y mejor botín.",
+                    "A veces hay reglas sorpresa al azar."
                 };
                 for(int i=0;i<lines.length;i++){
-                    int yy=cy+37+i*30;
-                    strip(g,cx-5,yy-5,w-side-65,26,i==3);
-                    line(g,font.plainSubstrByWidth(lines[i],w-side-90),cx+6,yy+4,INK);
+                    int yy=cy+33+i*25;
+                    boolean marked=i==0 || i==5;
+                    strip(g,cx-5,yy-5,w-side-65,23,marked);
+                    line(g,font.plainSubstrByWidth(lines[i],w-side-87),cx+5,yy+3,marked?DARK:INK);
                 }
+                line(g,"Completados: "+a[0]+" · Coop.: "+a[12],cx,cy+262,MUTED);
             }
             case 5 -> {
                 section(g,"MISIONES DIARIAS Y SEMANALES",Items.CLOCK);
