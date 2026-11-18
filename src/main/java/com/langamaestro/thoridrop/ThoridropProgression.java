@@ -58,7 +58,7 @@ public final class ThoridropProgression {
         }
         if(!week.equals(STATE.getProperty(prefix+"week",""))) {
             STATE.setProperty(prefix+"week",week);
-            set(id,"w_wins",0);set(id,"w_legendary",0);set(id,"w_claimed",0);
+            set(id,"w_wins",0);set(id,"w_legendary",0);set(id,"w_claimed",0);set(id,"w_legendary_claimed",0);
         }
     }
     public static synchronized void onVictory(UUID id,DropSession.Rarity rarity,
