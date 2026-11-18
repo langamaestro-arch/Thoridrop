@@ -8,283 +8,319 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import java.util.ArrayList;
+import java.util.List;
 
+/** The warm parchment, ruby border and framed-panel layout of the EvolutionCraft guide.
+ * All prices are display-only; the dedicated server owns purchase decisions.
+ */
 public final class ThoridropMenuScreen extends Screen {
-    // Exact visual palette from EvolutionCraft ProgressScreen.
-    private static final int GOLD=0xFFF2CC71, WHITE=0xFFF4F0E4, MUTED=0xFFB0BBC5;
-    private static final int GREEN=0xFF77DA9B, EDGE=0xFF806844;
-    private static final int BACK=0xFF17212A, INNER=0xFF22313B;
+    private static final int INK=0xFF694022, DARK=0xFF54301B, GOLD=0xFFD58B38;
+    private static final int LIGHT=0xFFFFD377, CREAM=0xFFFFE8BA, PAPER=0xFFFFF0D1;
+    private static final int PANEL=0xFFF8E3BE, EDGE=0xFF9F4A2F, RED=0xFFAD4A3A;
+    private static final int GREEN=0xFF4D9B51, MUTED=0xFF956B49;
     private static final String[] TABS={"Estadísticas","Logros","Clasificación","Mercado","Desafíos","Misiones","Colección","Información"};
-    private static final net.minecraft.world.item.Item[] TAB_ITEMS={
-        Items.BOOK,Items.NETHER_STAR,Items.PAPER,Items.EMERALD,
+    private static final Item[] TAB_ITEMS={Items.BOOK,Items.NETHER_STAR,Items.PAPER,Items.EMERALD,
         Items.IRON_SWORD,Items.CLOCK,Items.NETHERITE_AXE,Items.COMPASS};
-    private static String snapshot="";
-    private int tab=0;
-    private int x,y,w,h;
-    private int marketPage=0,rankPage=0,rankMode=0,confirmId=-1;
-    private int progressLevel() {try{return Integer.parseInt(rows()[15].split(",")[0]);}catch(Exception e){return 1;}}
-    private int progressXp() {try{return Integer.parseInt(rows()[15].split(",")[1]);}catch(Exception e){return 0;}}
-    private int prestigeCount() {try{return Integer.parseInt(rows()[15].split(",")[2]);}catch(Exception e){return 0;}}
-    private String rankTitle() {try{return rows()[15].split(",")[3];}catch(Exception e){return "Recluta";}}
     private static final String[] CATEGORIES={"Materiales","Armas","Armaduras","Herramientas","Consumibles"};
     private static final String[] NAMES={"Hierro x16","Diamantes x5","Manzanas doradas x4","Espada del guardián",
         "Peto de diamante","Pico de diamante","Arco mítico","Casco de netherita",
         "Zanahorias doradas x12","Esmeraldas x12","Hacha legendaria","Flechas x64"};
-    private static final int[] COST={15,60,85,250,140,125,190,280,95,55,245,35};
+    private static final int[] COST={60,240,340,1000,560,500,760,1120,380,220,980,140};
     private static final int[] LEVEL={0,0,0,37,28,30,36,42,0,0,40,0};
     private static final String[] GROUP={"Materiales","Materiales","Consumibles","Armas",
-        "Armaduras","Herramientas","Armas","Armaduras",
-        "Consumibles","Materiales","Herramientas","Consumibles"};
-    private static final net.minecraft.world.item.Item[] ICONS={
-        Items.IRON_INGOT,Items.DIAMOND,Items.GOLDEN_APPLE,Items.NETHERITE_SWORD,
+        "Armaduras","Herramientas","Armas","Armaduras","Consumibles",
+        "Materiales","Herramientas","Consumibles"};
+    private static final Item[] ICONS={Items.IRON_INGOT,Items.DIAMOND,Items.GOLDEN_APPLE,Items.NETHERITE_SWORD,
         Items.DIAMOND_CHESTPLATE,Items.DIAMOND_PICKAXE,Items.BOW,Items.NETHERITE_HELMET,
         Items.GOLDEN_CARROT,Items.EMERALD,Items.NETHERITE_AXE,Items.ARROW};
-
+    private static String snapshot="";
+    private int tab=0,marketPage=0,rankPage=0,rankMode=0,confirmId=-1;
+    private int x,y,w,h,cx,cy,side,tabHeight;
+    private final List<PaintButton> paintButtons=new ArrayList<>();
+    private record PaintButton(int bx,int by,int bw,int bh,String label,Item icon,boolean active) {}
     public ThoridropMenuScreen() {
         super(Minecraft.getInstance(),Minecraft.getInstance().font,Component.literal("Thoridrop"));
     }
-
-    public static void receive(String data) { snapshot = data; }
-    private String[] rows() { return snapshot.split("\\n",-1); }
-    private int[] stats() {
-        int[] result=new int[16];
-        String[] rows=rows();
-        if(rows.length<2)return result;
-        String[] parts=rows[1].split(",");
-        for(int i=0;i<Math.min(result.length,parts.length);i++)
-            try { result[i]=Integer.parseInt(parts[i]); } catch(NumberFormatException ignored) {}
-        return result;
+    public static void receive(String data){snapshot=data;}
+    private String[] rows(){return snapshot.split("\\n",-1);}
+    private int[] stats(){
+        int[] v=new int[16];String[] rr=rows();
+        if(rr.length<2)return v;
+        String[] parts=rr[1].split(",");
+        for(int i=0;i<Math.min(v.length,parts.length);i++)
+            try{v[i]=Integer.parseInt(parts[i]);}catch(NumberFormatException ignored){}
+        return v;
     }
-    private int balance() {
-        String[] r=rows();
-        try { return Integer.parseInt(r[0]); } catch(Exception ignored) { return 0; }
+    private int balance(){try{return Integer.parseInt(rows()[0]);}catch(Exception ignored){return 0;}}
+    private int progressLevel(){try{return Integer.parseInt(rows()[15].split(",")[0]);}catch(Exception e){return 1;}}
+    private int progressXp(){try{return Integer.parseInt(rows()[15].split(",")[1]);}catch(Exception e){return 0;}}
+    private int prestigeCount(){try{return Integer.parseInt(rows()[15].split(",")[2]);}catch(Exception e){return 0;}}
+    private String rankTitle(){try{return rows()[15].split(",")[3];}catch(Exception e){return "Recluta";}}
+    private void refresh(){ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(0));}
+    private void action(int n){ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(n));}
+    private void addStyled(String text,int bx,int by,int bw,int bh,Item icon,boolean selected,Runnable click) {
+        Button nativeButton=Button.builder(Component.literal(text),button->click.run())
+            .bounds(bx,by,bw,bh).build();
+        addRenderableWidget(nativeButton);
+        paintButtons.add(new PaintButton(bx,by,bw,bh,text,icon,selected));
     }
-    private void refresh() {
-        ClientPacketDistributor.sendToServer(new ThoridropMenuNetwork.MenuRequest(0));
-    }
-
-    @Override
-    protected void init() {
-        w=Math.min(this.width-14,500);
-        h=Math.min(this.height-14,330);
-        x=(this.width-w)/2;
-        y=(this.height-h)/2;
-        int left=120;
+    @Override protected void init() {
+        w=Math.min(width-14,620); h=Math.min(height-12,440);
+        x=(width-w)/2;y=(height-h)/2;
+        side=Math.max(122,Math.min(170,w*29/100));
+        tabHeight=Math.max(24,(h-112)/8);
+        cx=x+side+34;cy=y+109;
+        paintButtons.clear();
         for(int i=0;i<TABS.length;i++) {
             final int selected=i;
-            addRenderableWidget(Button.builder(Component.literal(TABS[i]),button->{
-                tab=selected;
-                confirmId=-1;
-                rebuildWidgets();
-            }).bounds(x+12,y+43+i*29,left,23).build());
+            addStyled(TABS[i],x+25,y+101+i*tabHeight,side-38,tabHeight-3,
+                TAB_ITEMS[i],tab==i,()->{tab=selected;confirmId=-1;rebuildWidgets();});
         }
-        addRenderableWidget(Button.builder(Component.literal("↻"),button->refresh())
-            .bounds(x+w-66,y+9,24,20).build());
-        addRenderableWidget(Button.builder(Component.literal("X"),button->onClose())
-            .bounds(x+w-38,y+9,24,20).build());
-        if(tab==0 && progressLevel()>=100) {
-            addRenderableWidget(Button.builder(Component.literal("Obtener prestigio"),
-                button->{ClientPacketDistributor.sendToServer(
-                    new ThoridropMenuNetwork.MenuRequest(20));})
-                .bounds(x+w-153,y+h-33,139,21).build());
-        }
+        addStyled("X",x+w-49,y+21,27,23,null,false,this::onClose);
+        addStyled("↻",x+w-83,y+21,27,23,null,false,this::refresh);
+        if(tab==0 && progressLevel()>=100)
+            addStyled("Obtener prestigio",x+w-162,y+h-46,142,21,null,true,()->action(20));
         if(tab==2) {
-            addRenderableWidget(Button.builder(Component.literal("‹"),button->{
-                rankPage=Math.max(0,rankPage-1); rebuildWidgets();
-            }).bounds(x+153,y+h-36,26,20).build());
-            addRenderableWidget(Button.builder(Component.literal("›"),button->{
-                rankPage=Math.min(3,rankPage+1); rebuildWidgets();
-            }).bounds(x+w-40,y+h-36,26,20).build());
-            addRenderableWidget(Button.builder(Component.literal("Cambiar ranking"),button->{
-                rankMode=(rankMode+1)%3; rankPage=0; rebuildWidgets();
-            }).bounds(x+188,y+h-36,123,20).build());
+            addStyled("<",cx, y+h-48,25,24,null,false,()->{rankPage=Math.max(0,rankPage-1);rebuildWidgets();});
+            addStyled(">",x+w-48,y+h-48,25,24,null,false,()->{rankPage=Math.min(3,rankPage+1);rebuildWidgets();});
+            addStyled("Cambiar ranking",cx+37,y+h-48,125,24,null,true,()->{
+                rankMode=(rankMode+1)%3;rankPage=0;rebuildWidgets();});
         }
         if(tab==3) {
-            addRenderableWidget(Button.builder(Component.literal("‹"),button->{
-                marketPage=(marketPage+4)%5; confirmId=-1; rebuildWidgets();
-            }).bounds(x+152,y+72,23,20).build());
-            addRenderableWidget(Button.builder(Component.literal("›"),button->{
-                marketPage=(marketPage+1)%5; confirmId=-1; rebuildWidgets();
-            }).bounds(x+w-39,y+72,23,20).build());
+            addStyled("<",cx,y+144,25,22,null,false,()->{
+                marketPage=(marketPage+4)%5;confirmId=-1;rebuildWidgets();});
+            addStyled(">",x+w-48,y+144,25,22,null,false,()->{
+                marketPage=(marketPage+1)%5;confirmId=-1;rebuildWidgets();});
             int row=0;
             for(int i=0;i<NAMES.length;i++) {
                 if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
-                final int action=i+1;
-                final boolean isConfirm=confirmId==action;
-                addRenderableWidget(Button.builder(
-                    Component.literal(isConfirm?"Confirmar":("Comprar "+COST[i])),
-                    button->{
-                        if(confirmId!=action) {
-                            confirmId=action;
-                            rebuildWidgets();
-                        } else {
-                            confirmId=-1;
-                            ClientPacketDistributor.sendToServer(
-                                new ThoridropMenuNetwork.MenuRequest(action));
-                            rebuildWidgets();
-                        }
-                    }).bounds(x+w-104,y+103+row*45,88,21).build());
+                final int id=i+1;
+                addStyled(confirmId==id?"Confirmar":"Comprar "+COST[i],
+                    x+w-121,y+191+row*51,97,22,null,confirmId==id,()->{
+                        if(confirmId!=id)confirmId=id;
+                        else {confirmId=-1;action(id);}
+                        rebuildWidgets();
+                    });
                 row++;
             }
         }
     }
-
-    private void line(GuiGraphicsExtractor gfx,String line,int lx,int ly,int color) {
-        gfx.text(font,line,lx,ly,color,true);
+    private void line(GuiGraphicsExtractor g,String t,int px,int py,int color){
+        g.text(font,t,px,py,color,false);
     }
-    private void entry(GuiGraphicsExtractor gfx,String label,int value,int cx,int cy) {
-        line(gfx,label+":  §e"+value,cx,cy,WHITE);
+    private void centered(GuiGraphicsExtractor g,String t,int centerX,int py,int color){
+        g.centeredText(font,t,centerX,py,color);
     }
-    private void divider(GuiGraphicsExtractor gfx,int cy) {gfx.fill(x+147,cy,x+w-12,cy+1,0x667E4C9A);}
-
-    @Override
-    public void extractRenderState(GuiGraphicsExtractor gfx,int mouseX,int mouseY,float partialTick) {
-        gfx.fill(0,0,width,height,0xB9000000);
-        gfx.fill(x-4,y-4,x+w+4,y+h+4,EDGE);
-        gfx.fill(x-2,y-2,x+w+2,y+h+2,0xFF0C1217);
-        gfx.fill(x,y,x+w,y+h,BACK);
-        gfx.fill(x+7,y+7,x+w-7,y+37,0xFF2A3C36);
-        gfx.fill(x+7,y+35,x+w-7,y+37,GOLD);
-        gfx.fill(x+139,y+40,x+141,y+h-9,EDGE);
-        gfx.fill(x+145,y+40,x+w-10,y+h-10,0xFF101A22);
-        for(int i=0;i<TABS.length;i++) {
-            int yy=y+43+i*29;
-            if(i==tab)gfx.outline(x+10,yy-2,124,26,GOLD);
-            gfx.item(new ItemStack(TAB_ITEMS[i]),x+15,yy+3);
+    private void frame(GuiGraphicsExtractor g,int a,int b,int c,int d,int fill) {
+        g.fill(a-3,b-3,c+3,d+3,RED);
+        g.fill(a-1,b-1,c+1,d+1,LIGHT);
+        g.fill(a,b,c,d,fill);
+        g.outline(a,b,c-a,d-b,EDGE);
+    }
+    private void decorative(GuiGraphicsExtractor g) {
+        g.fill(0,0,width,height,0xB9000000);
+        // Pixel-layered ruby-and-gold external border; cream interior matching EvolutionCraft.
+        g.fill(x-6,y-6,x+w+6,y+h+6,0xFF6E2E35);
+        g.fill(x-4,y-4,x+w+4,y+h+4,0xFFE7B45A);
+        g.fill(x-2,y-2,x+w+2,y+h+2,0xFF9D4931);
+        g.fill(x,y,x+w,y+h,CREAM);
+        for(int i=0;i<w;i+=16){
+            g.fill(x+i,y-4,x+i+8,y-2,LIGHT);
+            g.fill(x+i,y+h+2,x+i+8,y+h+4,LIGHT);
         }
-        gfx.text(font,"✦  T H O R I D R O P  ✦",x+13,y+15,GOLD,true);
-        gfx.text(font,"Puntos: "+balance(),x+152,y+15,0xFFFFDE8B,true);
+        for(int i=0;i<h;i+=14){
+            g.fill(x-4,y+i,x-2,y+i+7,LIGHT);
+            g.fill(x+w+2,y+i,x+w+4,y+i+7,LIGHT);
+        }
+        frame(g,x+15,y+17,x+w-15,y+78,0xFFFFD879);
+        g.fill(x+23,y+25,x+w-23,y+30,0xFFFFE6A6);
+        g.fill(x+23,y+70,x+w-23,y+73,GOLD);
+        g.item(new ItemStack(Items.ENCHANTED_BOOK),x+28,y+35);
+        line(g,"✦  T H O R I D R O P  ✦",x+56,y+32,DARK);
+        line(g,"C E N T R O   D E L   A V E N T U R E R O",x+56,y+49,MUTED);
+        line(g,"Puntos: "+balance(),x+w-185,y+36,INK);
+        frame(g,x+15,y+91,x+side+7,y+h-18,PANEL);
+        frame(g,x+side+17,y+91,x+w-15,y+h-18,PAPER);
+        line(g,"SECCIONES",x+31,y+84,DARK);
+        g.fill(x+30,y+94,x+side-4,y+96,GOLD);
+        // Subtle row separators and corner jewels.
+        for(int i=0;i<4;i++){
+            int fx=(i%2==0)?x+8:x+w-10;
+            int fy=(i<2)?y+8:y+h-10;
+            g.fill(fx-2,fy-2,fx+3,fy+3,GOLD);
+            g.fill(fx,fy,fx+2,fy+2,0xFFAC4D85);
+        }
+        g.fill(x+side+29,y+97,x+w-26,y+98,GOLD);
+    }
+    private void section(GuiGraphicsExtractor g,String heading,Item icon){
+        g.fill(cx-7,cy-17,x+w-25,cy+23,0xFFFFE1AC);
+        g.fill(cx-7,cy-17,x+w-25,cy-14,GOLD);
+        if(icon!=null)g.item(new ItemStack(icon),cx,cy-6);
+        line(g,heading,cx+(icon==null?3:23),cy-4,DARK);
+    }
+    private void strip(GuiGraphicsExtractor g,int px,int py,int ww,int hh,boolean success){
+        g.fill(px,py,px+ww,py+hh,success?0xFFE4F1D5:0xFFF8EAD2);
+        g.fill(px,py,px+3,py+hh,success?GREEN:GOLD);
+        g.fill(px,py+hh-2,px+ww,py+hh,0xFFD7B387);
+    }
+    private void entry(GuiGraphicsExtractor g,String label,int value,int px,int py) {
+        line(g,label+":  "+value,px,py,INK);
+    }
+    private void drawTab(GuiGraphicsExtractor g,PaintButton b,int mx,int my) {
+        boolean hover=mx>=b.bx()&&mx<b.bx()+b.bw()&&my>=b.by()&&my<b.by()+b.bh();
+        int l=b.bx(),t=b.by(),r=l+b.bw(),d=t+b.bh();
+        g.fill(l-2,t-2,r+2,d+2,b.active()?GOLD:EDGE);
+        g.fill(l-1,t-1,r+1,d+1,0xFFFFF0CA);
+        g.fill(l,t,r,d,b.active()?0xFFFFD172:hover?0xFFFFE0A0:0xFFFFEBCB);
+        g.fill(l+2,t+2,r-2,t+4,0xFFFFF7D9);
+        g.fill(l+2,d-4,r-2,d-2,0xFFE0B887);
+        if(b.icon()!=null)g.item(new ItemStack(b.icon()),l+5,t+Math.max(1,(b.bh()-16)/2));
+        int textX=l+(b.icon()==null?Math.max(4,(b.bw()-font.width(b.label()))/2):25);
+        String label=font.plainSubstrByWidth(b.label(),b.bw()-(b.icon()==null?8:29));
+        line(g,label,textX,t+(b.bh()-8)/2,DARK);
+    }
+    @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial) {
+        decorative(g);
         int[] a=stats();
-        int cx=x+153, cy=y+54;
         switch(tab) {
             case 0 -> {
-                line(gfx,"ESTADÍSTICAS PERSONALES",cx,cy,GOLD);
-                line(gfx,"Nivel "+progressLevel()+"/100 · "+rankTitle()+" · Prestigio "+prestigeCount(),cx,cy+13,GREEN);
-                gfx.fill(cx,cy+25,x+w-15,cy+33,0xFF0A141B);
-                gfx.fill(cx+1,cy+26,cx+1+Math.max(0,(w-173)*((progressXp()%100))/100),cy+32,GREEN);
-                entry(gfx,"Victorias",a[0],cx,cy+40);
-                line(gfx,"Normal "+a[1]+"  Mítico "+a[2]+"  Legendario "+a[3],cx,cy+53,MUTED);
-                entry(gfx,"Recompensas",a[4],cx,cy+69);
-                entry(gfx,"Muertes",a[5],cx,cy+82);
-                entry(gfx,"Sin morir",a[6],cx,cy+95);
-                divider(gfx,cy+110);
-                entry(gfx,"Enemigos",a[7],cx,cy+120);
-                entry(gfx,"Impactos",a[8],cx,cy+133);
-                entry(gfx,"Racha",a[9],cx,cy+146);
-                line(gfx,"Racha máxima "+a[10],cx,cy+159,MUTED);
-                line(gfx,"Mejor tiempo: "+(a[11]<=0?"Sin récord":(a[11]/20)+"s"),cx,cy+172,WHITE);
-                line(gfx,"Victorias cooperativas: "+a[12],cx,cy+185,WHITE);
-                String[] rr=rows();
-                if(rr.length>14)line(gfx,"Historial: "+font.plainSubstrByWidth(
-                    rr[14].split("\\|")[0],w-175),cx,cy+202,MUTED);
+                section(g,"ESTADÍSTICAS PERSONALES",Items.BOOK);
+                int start=cy+34;
+                line(g,"Nivel "+progressLevel()+"/100 · "+rankTitle()+" · Prestigio "+prestigeCount(),cx,start,GREEN);
+                g.fill(cx,start+17,x+w-30,start+26,0xFFD7B58A);
+                g.fill(cx+1,start+18,cx+1+Math.max(0,(x+w-32-cx)*(progressXp()%100)/100),start+25,GREEN);
+                entry(g,"Victorias",a[0],cx,start+34);
+                line(g,"Normal "+a[1]+"  Mítico "+a[2]+"  Legendario "+a[3],cx,start+48,MUTED);
+                entry(g,"Recompensas",a[4],cx,start+64);
+                entry(g,"Muertes",a[5],cx,start+78);
+                entry(g,"Sin morir",a[6],cx,start+92);
+                g.fill(cx,start+107,x+w-29,start+108,GOLD);
+                entry(g,"Enemigos",a[7],cx,start+117);
+                entry(g,"Impactos",a[8],cx,start+131);
+                entry(g,"Racha",a[9],cx,start+145);
+                entry(g,"Racha máxima",a[10],cx,start+159);
+                line(g,"Mejor tiempo: "+(a[11]==0?"Sin récord":a[11]/20+" s"),cx,start+173,INK);
+                entry(g,"Victorias cooperativas",a[12],cx,start+187);
+                if(rows().length>14)line(g,"Historial: "+font.plainSubstrByWidth(rows()[14].split("\\|")[0],w-side-64),
+                    cx,start+207,MUTED);
             }
             case 1 -> {
-                line(gfx,"LOGROS THORIDROP",cx,cy,GOLD);
-                int i=1;
-                for(int goal:new int[]{10,25,50,100}) {
-                    line(gfx,(a[0]>=goal?"§a✔ ":"§7○ ")+"Veterano "+goal+" victorias ("+Math.min(a[0],goal)+"/"+goal+")",cx,cy+16*i++,WHITE);
+                section(g,"LOGROS DE THORIDROP",Items.NETHER_STAR);
+                int index=0;
+                for(int goal:new int[]{10,25,50,100}){
+                    boolean done=a[0]>=goal;
+                    int yy=cy+35+index++*27;
+                    strip(g,cx-5,yy-6,w-side-65,24,done);
+                    line(g,(done?"✔ ":"◇ ")+"Veterano "+goal+" victorias ("+Math.min(a[0],goal)+"/"+goal+")",cx+8,yy+1,done?GREEN:INK);
                 }
-                line(gfx,(a[3]>0?"§a✔ ":"§7○ ")+"Conquistador legendario",cx,cy+85,WHITE);
-                line(gfx,(a[6]>0?"§a✔ ":"§7○ ")+"Superviviente impecable",cx,cy+103,WHITE);
-                line(gfx,(a[12]>0?"§a✔ ":"§7○ ")+"Victoria en equipo",cx,cy+121,WHITE);
-                line(gfx,"Eventos especiales: "+a[14],cx,cy+149,MUTED);
-                line(gfx,"Victorias contrarreloj: "+a[13],cx,cy+166,MUTED);
+                String[] labels={"Conquistador legendario","Superviviente impecable","Victoria en equipo"};
+                boolean[] check={a[3]>0,a[6]>0,a[12]>0};
+                for(int i=0;i<3;i++){
+                    int yy=cy+150+i*28;
+                    strip(g,cx-5,yy-6,w-side-65,24,check[i]);
+                    line(g,(check[i]?"✔ ":"◇ ")+labels[i],cx+8,yy+1,check[i]?GREEN:INK);
+                }
             }
             case 2 -> {
+                section(g,rankMode==1?"VICTORIAS LEGENDARIAS":rankMode==2?"DESAFÍOS SIN MORIR":"CLASIFICACIÓN GENERAL",Items.PAPER);
                 String[] rr=rows();
-                String caption=switch(rankMode) {
-                    case 1 -> "VICTORIAS LEGENDARIAS";
-                    case 2 -> "DESAFÍOS SIN MORIR";
-                    default -> "VICTORIAS TOTALES";
-                };
-                line(gfx,caption,cx,cy,GOLD);
-                int index=2+rankMode*4+rankPage;
-                String current=rr.length>index?rr[index]:"Sin clasificaciones";
-                String[] players=current.split(" \\| ");
-                for(int i=0;i<Math.min(players.length,6);i++)
-                    line(gfx,font.plainSubstrByWidth(players[i],w-182),cx,cy+24+i*24,WHITE);
-                line(gfx,"Página "+(rankPage+1)+"/4",cx+5,cy+182,MUTED);
+                int idx=2+rankMode*4+rankPage;
+                String[] players=(rr.length>idx?rr[idx]:"Sin jugadores").split(" \\| ");
+                for(int i=0;i<Math.min(players.length,6);i++){
+                    int yy=cy+38+i*30;
+                    strip(g,cx-5,yy-5,w-side-65,26,i==0);
+                    line(g,font.plainSubstrByWidth(players[i],w-side-88),cx+6,yy+3,INK);
+                }
+                centered(g,"Página "+(rankPage+1)+" de 4",cx+(w-side-56)/2,y+h-72,MUTED);
             }
             case 3 -> {
-                line(gfx,"MERCADO DE RECOMPENSAS",cx,cy,GOLD);
-                line(gfx,"Categoría: "+CATEGORIES[marketPage],cx+34,cy+30,0xFFEABDF6);
+                section(g,"MERCADO DE RECOMPENSAS",Items.EMERALD);
+                line(g,"Categoría: "+CATEGORIES[marketPage],cx+42,y+150,DARK);
                 int row=0;
-                for(int i=0;i<NAMES.length;i++) {
+                for(int i=0;i<NAMES.length;i++){
                     if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
-                    int yy=cy+53+row*45;
-                    gfx.fill(cx-3,yy-3,x+w-11,yy+38,INNER);
-                    gfx.item(new ItemStack(ICONS[i]),cx+3,yy+5);
-                    line(gfx,NAMES[i],cx+26,yy+7,WHITE);
-                    line(gfx,"Precio: "+COST[i]+" pts"+
-                        (LEVEL[i]>0?" • Encant. nivel "+LEVEL[i]:""),
-                        cx+26,yy+20,MUTED);
+                    int yy=y+184+row*51;
+                    strip(g,cx-7,yy-5,w-side-53,45,confirmId==i+1);
+                    g.item(new ItemStack(ICONS[i]),cx+2,yy+4);
+                    line(g,font.plainSubstrByWidth(NAMES[i],w-side-191),cx+23,yy+6,INK);
+                    line(g,"Precio: "+COST[i]+" pts"+(LEVEL[i]>0?" · Encant. "+LEVEL[i]:""),
+                        cx+23,yy+22,MUTED);
                     row++;
                 }
-                line(gfx,"Compra con confirmación. Saldo: "+balance(),cx,cy+195,MUTED);
+                line(g,"Saldo: "+balance()+" · Compra con confirmación",cx,y+h-54,DARK);
             }
             case 4 -> {
-                line(gfx,"DESAFÍOS Y PROGRESO",cx,cy,GOLD);
-                line(gfx,"Normal  •  Mítico  •  Legendario",cx,cy+21,WHITE);
-                line(gfx,"Suministros invocados: "+a[15],cx,cy+41,MUTED);
-                line(gfx,"Cooperativos completados: "+a[12],cx,cy+60,WHITE);
-                line(gfx,"Modificadores posibles:",cx,cy+85,GOLD);
-                line(gfx,"Horda  •  Velocidad  •  Botín",cx,cy+102,WHITE);
-                line(gfx,"Élites  •  Contrarreloj",cx,cy+115,WHITE);
-                line(gfx,"Oleada sorpresa",cx,cy+128,WHITE);
-                line(gfx,"El jefe final conserva su IA original.",cx,cy+155,MUTED);
+                section(g,"DESAFÍOS Y PROGRESO",Items.IRON_SWORD);
+                String[] lines={
+                    "Normal  ·  Mítico  ·  Legendario",
+                    "Suministros invocados: "+a[15],
+                    "Cooperativos completados: "+a[12],
+                    "Modificadores de combate:",
+                    "Horda · Velocidad · Botín extraordinario",
+                    "Élites · Contrarreloj · Oleada sorpresa",
+                    "Los jefes conservan sus habilidades",
+                    "Las cinco oleadas son obligatorias"
+                };
+                for(int i=0;i<lines.length;i++){
+                    int yy=cy+37+i*30;
+                    strip(g,cx-5,yy-5,w-side-65,26,i==3);
+                    line(g,font.plainSubstrByWidth(lines[i],w-side-90),cx+6,yy+4,INK);
+                }
             }
             case 5 -> {
-                line(gfx,"MISIONES DIARIAS Y SEMANALES",cx,cy,GOLD);
+                section(g,"MISIONES DIARIAS Y SEMANALES",Items.CLOCK);
                 String[] missions=rows().length>16?rows()[16].split("\\|"):new String[0];
-                for(int i=0;i<missions.length;i++) {
-                    int my=cy+24+i*54;
-                    gfx.fill(cx-4,my-5,x+w-12,my+39,INNER);
-                    gfx.fill(cx-4,my-5,cx-1,my+39,GREEN);
-                    line(gfx,font.plainSubstrByWidth(missions[i],w-180),cx+6,my+9,WHITE);
+                for(int i=0;i<Math.min(3,missions.length);i++){
+                    int yy=cy+39+i*67;
+                    strip(g,cx-5,yy-5,w-side-65,58,missions[i].contains("COBRADA"));
+                    line(g,font.plainSubstrByWidth(missions[i],w-side-89),cx+5,yy+14,INK);
                 }
-                line(gfx,"Reinicio diario y semanal: UTC",cx,cy+206,MUTED);
-                line(gfx,"Puntos otorgados al recoger el cofre",cx,cy+219,MUTED);
+                line(g,"Reinicio UTC · Cobro al recoger el cofre",cx,cy+251,MUTED);
             }
             case 6 -> {
-                line(gfx,"COLECCIÓN DE EQUIPO EXCLUSIVO",cx,cy,GOLD);
-                String raw=rows().length>17?rows()[17]:"Sin piezas registradas";
-                String[] pieces=raw.split("\\|");
-                net.minecraft.world.item.Item[] icons={
-                    Items.DIAMOND_AXE,Items.DIAMOND_SWORD,Items.DIAMOND_PICKAXE,
+                section(g,"COLECCIÓN DE EQUIPO EXCLUSIVO",Items.NETHERITE_AXE);
+                String[] pieces=rows().length>17?rows()[17].split("\\|"):new String[0];
+                Item[] icons={Items.DIAMOND_AXE,Items.DIAMOND_SWORD,Items.DIAMOND_PICKAXE,
                     Items.NETHERITE_AXE,Items.NETHERITE_SWORD,Items.NETHERITE_CHESTPLATE};
-                for(int i=0;i<Math.min(6,pieces.length);i++) {
-                    int py=cy+25+i*33;
-                    gfx.fill(cx-4,py-4,x+w-12,py+27,INNER);
-                    gfx.item(new ItemStack(icons[i]),cx+5,py+3);
-                    line(gfx,pieces[i],cx+32,py+9,WHITE);
+                for(int i=0;i<Math.min(6,pieces.length);i++){
+                    int yy=cy+30+i*36;
+                    boolean owned=pieces[i].contains("✔");
+                    strip(g,cx-5,yy-5,w-side-65,31,owned);
+                    g.item(new ItemStack(icons[i]),cx+5,yy+2);
+                    line(g,font.plainSubstrByWidth(pieces[i],w-side-110),cx+28,yy+7,owned?GREEN:INK);
                 }
-                line(gfx,"Piezas míticas y legendarias únicas",cx,cy+230,MUTED);
             }
             default -> {
-                line(gfx,"INFORMACIÓN Y AYUDA",cx,cy,GOLD);
-                line(gfx,"Tecla H: abrir y cerrar el menú",cx,cy+20,WHITE);
-                line(gfx,"ESC: cerrar",cx,cy+36,WHITE);
-                line(gfx,"Combate para ganar puntos.",cx,cy+60,WHITE);
-                line(gfx,"Abre el cofre para cobrar.",cx,cy+76,WHITE);
-                line(gfx,"Los puntos se guardan en el servidor.",cx,cy+103,WHITE);
-                line(gfx,"Las compras se validan por jugador.",cx,cy+120,WHITE);
-                line(gfx,"Los controles son configurables.",cx,cy+145,MUTED);
+                section(g,"INFORMACIÓN Y AYUDA",Items.COMPASS);
+                String[] help={"Pulsa H para abrir o cerrar el menú",
+                    "ESC cierra la pantalla",
+                    "Consigue puntos al terminar desafíos",
+                    "Recoge la recompensa en el cofre",
+                    "Compra objetos desde el mercado",
+                    "La tienda valida compras en el servidor",
+                    "Las misiones se reinician automáticamente",
+                    "Tu progreso se guarda por jugador"};
+                for(int i=0;i<help.length;i++){
+                    int yy=cy+35+i*28;
+                    strip(g,cx-5,yy-5,w-side-65,24,false);
+                    line(g,font.plainSubstrByWidth(help[i],w-side-85),cx+7,yy+3,INK);
+                }
             }
         }
-        super.extractRenderState(gfx,mouseX,mouseY,partialTick);
+        super.extractRenderState(g,mx,my,partial);
+        // Paint themed buttons over native clickable widgets; retains keyboard/mouse navigation.
+        for(PaintButton b:paintButtons)drawTab(g,b,mx,my);
     }
-
-    @Override
-    public boolean keyPressed(KeyEvent event) {
-        if(ThoridropMenuClient.OPEN.isActiveAndMatches(InputConstants.getKey(event))) {
-            onClose();
-            return true;
+    @Override public boolean keyPressed(KeyEvent e){
+        if(ThoridropMenuClient.OPEN.isActiveAndMatches(InputConstants.getKey(e))){
+            onClose();return true;
         }
-        return super.keyPressed(event);
+        return super.keyPressed(e);
     }
-
-    @Override public boolean isPauseScreen() {return false;}
+    @Override public boolean isPauseScreen(){return false;}
 }
