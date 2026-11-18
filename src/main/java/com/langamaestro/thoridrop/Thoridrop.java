@@ -73,6 +73,13 @@ public final class Thoridrop {
     private boolean automaticDrop;
     private int specialEventChance = 10;
     private boolean specialEvent;
+    // Event variant 0 normal, 1 siege, 2 veteran elites, 3 cursed wave.
+    private int extraordinaryVariant;
+    private int eliteSpawnChancePercent = 22;
+    private int extraordinaryExtraMobs = 4;
+    private final java.util.Set<UUID> eliteWaveMobs = new java.util.HashSet<>();
+    private int eliteAbilityTicks;
+    private String waveBiomeLabel = "Llanura";
     private boolean globalAnnouncements = true, arrivalSounds = true, arrivalParticles = true;
     private final java.util.Set<UUID> completedStats = new java.util.HashSet<>();
     private String guardianDisplayName = "GUARDIÁN";
@@ -91,6 +98,8 @@ public final class Thoridrop {
         props.setProperty("arrival_sounds", "true");
         props.setProperty("arrival_particles", "true");
         props.setProperty("special_event_chance_percent", "10");
+        props.setProperty("elite_enemy_chance_percent", "22");
+        props.setProperty("extraordinary_extra_mobs", "4");
         props.setProperty("multiplayer_enabled", "true");
         props.setProperty("participation_radius_blocks", "24");
         props.setProperty("reward_claim_timeout_seconds", "600");
@@ -125,6 +134,8 @@ public final class Thoridrop {
             arrivalSounds = Boolean.parseBoolean(props.getProperty("arrival_sounds", "true"));
             arrivalParticles = Boolean.parseBoolean(props.getProperty("arrival_particles", "true"));
             specialEventChance = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("special_event_chance_percent", "10"))));
+            eliteSpawnChancePercent = Math.max(0,Math.min(75,Integer.parseInt(props.getProperty("elite_enemy_chance_percent","22"))));
+            extraordinaryExtraMobs = Math.max(0,Math.min(12,Integer.parseInt(props.getProperty("extraordinary_extra_mobs","4"))));
             multiplayerEnabled = Boolean.parseBoolean(props.getProperty("multiplayer_enabled", "true"));
             preserveInventoryOnEventDeath = Boolean.parseBoolean(props.getProperty("keep_inventory_on_event_death", "true"));
             participationRadius = Math.max(8, Math.min(96, Integer.parseInt(props.getProperty("participation_radius_blocks", "24"))));
@@ -361,6 +372,7 @@ public final class Thoridrop {
             session.eventId(),dropLevel.dimension().toString(),pos.getX(),pos.getY(),pos.getZ(),
             rarity,"AVAILABLE"));
         specialEvent = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < specialEventChance;
+        extraordinaryVariant = specialEvent ? 1+java.util.concurrent.ThreadLocalRandom.current().nextInt(3) : 0;
         modifierType = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < randomModifierChance
             ? 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(6) : 0;
         availableTicks = 0;
@@ -381,6 +393,9 @@ public final class Thoridrop {
         eventDeaths.clear();
         eventHits.clear();
         eventKills.clear();
+        eliteWaveMobs.clear();
+        eliteAbilityTicks=0;
+        waveBiomeLabel="Llanura";
         emptyWaveRetries=0;
         combatTicks = 0;
         timedChallengeSucceeded = false;
@@ -399,7 +414,9 @@ public final class Thoridrop {
             case 5 -> "CONTRARRELOJ"; default -> "OLEADA SORPRESA"; });
         DropStatistics.add(player.getUUID(), "started_" + rarity.name().toLowerCase(java.util.Locale.ROOT));
         player.sendSystemMessage(Component.literal("¡Suministro detectado! Mira al cielo: aterriza en unos segundos."));
-        if (specialEvent) broadcast("¡SUMINISTRO EXTRAORDINARIO! Recompensas adicionales al completar el evento.");
+        if (specialEvent) broadcast("§6✦ ¡EVENTO EXTRAORDINARIO: "+switch(extraordinaryVariant) {
+            case 1 -> "ASEDIO"; case 2 -> "GUARDIA ÉLITE"; default -> "MALDICIÓN";
+        }+"!§r Recompensas adicionales al vencer.");
         if (globalAnnouncements) broadcast("Suministro " + rarityName(rarity) + " en X=" + pos.getX() + " Z=" + pos.getZ() + " | " + (arrivalTimeoutTicks / 20) + " segundos para llegar.");
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
@@ -442,7 +459,7 @@ public final class Thoridrop {
             session=new DropSession(old.id(),old.rarity(),5);
             dropLevel=level;dropPosition=pos.immutable();arrivalTicks=0;
             availableTicks=0;chestOpen=false;chestOpeningTicks=-1;
-            specialEvent=false;modifierType=0;rewardTicks=0;
+            specialEvent=false;extraordinaryVariant=0;modifierType=0;rewardTicks=0;eliteWaveMobs.clear();
             participants.clear();claimedRewards.clear();completedStats.clear();
             eventHits.clear();eventKills.clear();eventDeaths.clear();waveMobs.clear();
             eventBar=new net.minecraft.server.level.ServerBossEvent(
@@ -560,6 +577,8 @@ public final class Thoridrop {
         }
         if (session.phase() == DropSession.Phase.COMBAT) {
             combatTicks++;
+            if(waveDelay==0 && session.wave()<5 && ++eliteAbilityTicks%80==0)
+                tickEliteAbilities();
             if (session.wave() == 5 && session.rarity() == DropSession.Rarity.LEGENDARY && waveDelay == 0 && !waveMobs.isEmpty()) tickGuardianAbility();
             for (ServerPlayer player : dropLevel.players()) {
                 if ((multiplayerEnabled || participants.isEmpty() || participants.contains(player.getUUID()))
@@ -1137,9 +1156,59 @@ public final class Thoridrop {
         return null;
     }
 
+    private String[] biomeWaveEnemies(String[] base,int wave) {
+        if(dropLevel==null || dropPosition==null)return base;
+        var biome=dropLevel.getBiome(dropPosition);
+        String name=biome.unwrapKey().map(key -> key.identifier().getPath()).orElse("");
+        if(biome.is(net.neoforged.neoforge.common.Tags.Biomes.IS_SNOWY)
+           ||name.contains("frozen")||name.contains("snow")) {
+            waveBiomeLabel="Nieve";
+            return wave>=3?new String[]{"stray","skeleton","spider"}:
+                new String[]{"stray","zombie","skeleton"};
+        }
+        if(name.contains("desert")||name.contains("badlands")) {
+            waveBiomeLabel="Desierto";
+            return wave>=3?new String[]{"husk","pillager","spider"}:
+                new String[]{"husk","skeleton","husk"};
+        }
+        if(name.contains("swamp")||name.contains("mangrove")) {
+            waveBiomeLabel="Pantano";
+            return wave>=3?new String[]{"bogged","witch","spider"}:
+                new String[]{"bogged","zombie","spider"};
+        }
+        if(name.contains("jungle")||name.contains("forest")||name.contains("taiga")) {
+            waveBiomeLabel="Bosque";
+            return wave>=3?new String[]{"spider","skeleton","pillager"}:
+                new String[]{"spider","zombie","skeleton"};
+        }
+        waveBiomeLabel="Llanura";
+        return base;
+    }
+
+    private void tickEliteAbilities() {
+        if(dropLevel==null)return;
+        for(UUID id:java.util.Set.copyOf(eliteWaveMobs)) {
+            var entity=dropLevel.getEntity(id);
+            if(!(entity instanceof net.minecraft.world.entity.Mob elite) || !elite.isAlive()) {
+                eliteWaveMobs.remove(id);
+                continue;
+            }
+            // Nearby elites debuff players; bosses are excluded, and no terrain is changed.
+            for(ServerPlayer player:dropLevel.players()) {
+                if(player.isSpectator()||player.isCreative()
+                    ||player.distanceToSqr(elite)>16.0)continue;
+                player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.SLOWNESS,50,0));
+                dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
+                    elite.getX(),elite.getY()+1.1,elite.getZ(),8,0.6,0.4,0.6,0.02);
+            }
+        }
+    }
+
     private void spawnWave() {
         if (session == null || session.phase() != DropSession.Phase.COMBAT) return;
         waveMobs.clear();
+        eliteWaveMobs.clear();
         guardianAttackTicks = 0;
         towerCheckTicks = 0;
         towerReinforcements = 0;
@@ -1154,6 +1223,7 @@ public final class Thoridrop {
             count += additional;
             if (modifierType == 1) count += Math.max(2, count / 2);
             if (modifierType == 6 && wave == 4) count += 5;
+            if (specialEvent && extraordinaryVariant==1) count += extraordinaryExtraMobs;
             count = Math.min(50, count);
         }
         String[] mobIds = switch (session.rarity()) {
@@ -1202,7 +1272,9 @@ public final class Thoridrop {
                 broadcast("Falta el jefe de Nicktale " + chosen + "; usando guardián alternativo.");
             }
         } else {
+            mobIds = biomeWaveEnemies(mobIds,wave);
             for (int j = 0; j < mobIds.length; j++) mobIds[j] = "minecraft:" + mobIds[j];
+            if(wave==1)broadcast("§e✦ Oleadas del bioma: "+waveBiomeLabel+"§r");
         }
         for (int i = 0; i < count; i++) {
             double angle = 2 * Math.PI * i / count;
@@ -1218,11 +1290,30 @@ public final class Thoridrop {
             if (entity == null) entity = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
             if (entity == null) continue;
             entity.setPos(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5);
-            if (wave < 5 && modifierType == 4 && entity instanceof net.minecraft.world.entity.Mob elite) {
+            boolean isElite=wave<5 && entity instanceof net.minecraft.world.entity.Mob
+                && (modifierType==4 || (specialEvent && extraordinaryVariant==2)
+                || java.util.concurrent.ThreadLocalRandom.current().nextInt(100)<eliteSpawnChancePercent
+                    && (session.rarity()!=DropSession.Rarity.COMMON || wave>=3));
+            if(isElite && entity instanceof net.minecraft.world.entity.Mob elite) {
+                eliteWaveMobs.add(entity.getUUID());
+                String title = switch(i%3) {
+                    case 0 -> "§6✦ CENTINELA ÉLITE"; case 1 -> "§d✦ CAZADOR ÉLITE";
+                    default -> "§c✦ BRUTO ÉLITE";
+                };
+                elite.setCustomName(Component.literal(title));
+                elite.setCustomNameVisible(true);
+                elite.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.STRENGTH,20*1200,0));
+                if(i%3==1)elite.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.SPEED,20*1200,0));
                 elite.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_HELMET));
                 elite.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_CHESTPLATE));
                 elite.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE,20*1200,0));
             }
+            if (wave<5 && specialEvent && extraordinaryVariant==3
+                && entity instanceof net.minecraft.world.entity.LivingEntity cursed)
+                cursed.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.SPEED,20*1200,0));
             if (wave < 5 && modifierType == 2 && entity instanceof net.minecraft.world.entity.LivingEntity fast) {
                 fast.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.SPEED, 20 * 1200, 0));
             }
