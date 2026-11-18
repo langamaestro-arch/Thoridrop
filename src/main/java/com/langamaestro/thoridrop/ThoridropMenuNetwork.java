@@ -36,7 +36,7 @@ public final class ThoridropMenuNetwork {
         registrar.playToServer(MenuRequest.TYPE, MenuRequest.CODEC, (packet, context) -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
             int action=packet.action();
-            if((action >= 1 && action <= 12) || action == 20) {
+            if((action >= 1 && action <= 12) || (action >= 21 && action <= 29) || action == 20) {
                 Thoridrop mod=Thoridrop.instance();
                 if(mod != null) mod.menuPurchase(player, action);
             } else if(action != 0) return;
