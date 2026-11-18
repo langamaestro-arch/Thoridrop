@@ -1160,26 +1160,36 @@ public final class Thoridrop {
         if(dropLevel==null || dropPosition==null)return base;
         var biome=dropLevel.getBiome(dropPosition);
         String name=biome.unwrapKey().map(key -> key.identifier().getPath()).orElse("");
+        boolean hard=session.rarity()==DropSession.Rarity.LEGENDARY;
+        boolean mythic=session.rarity()==DropSession.Rarity.RARE;
         if(biome.is(net.neoforged.neoforge.common.Tags.Biomes.IS_SNOWY)
            ||name.contains("frozen")||name.contains("snow")) {
             waveBiomeLabel="Nieve";
-            return wave>=3?new String[]{"stray","skeleton","spider"}:
-                new String[]{"stray","zombie","skeleton"};
+            return hard?new String[]{"stray","vindicator","pillager","witch"}:
+                mythic?new String[]{"stray","pillager","vindicator"}:
+                wave>=3?new String[]{"stray","skeleton","spider"}:
+                    new String[]{"stray","zombie","skeleton"};
         }
         if(name.contains("desert")||name.contains("badlands")) {
             waveBiomeLabel="Desierto";
-            return wave>=3?new String[]{"husk","pillager","spider"}:
-                new String[]{"husk","skeleton","husk"};
+            return hard?new String[]{"husk","vindicator","pillager","witch"}:
+                mythic?new String[]{"husk","pillager","vindicator"}:
+                wave>=3?new String[]{"husk","pillager","spider"}:
+                    new String[]{"husk","skeleton","husk"};
         }
         if(name.contains("swamp")||name.contains("mangrove")) {
             waveBiomeLabel="Pantano";
-            return wave>=3?new String[]{"bogged","witch","spider"}:
-                new String[]{"bogged","zombie","spider"};
+            return hard?new String[]{"bogged","witch","vindicator","pillager"}:
+                mythic?new String[]{"bogged","witch","pillager"}:
+                wave>=3?new String[]{"bogged","witch","spider"}:
+                    new String[]{"bogged","zombie","spider"};
         }
         if(name.contains("jungle")||name.contains("forest")||name.contains("taiga")) {
             waveBiomeLabel="Bosque";
-            return wave>=3?new String[]{"spider","skeleton","pillager"}:
-                new String[]{"spider","zombie","skeleton"};
+            return hard?new String[]{"spider","vindicator","pillager","witch"}:
+                mythic?new String[]{"spider","pillager","vindicator"}:
+                wave>=3?new String[]{"spider","skeleton","pillager"}:
+                    new String[]{"spider","zombie","skeleton"};
         }
         waveBiomeLabel="Llanura";
         return base;
