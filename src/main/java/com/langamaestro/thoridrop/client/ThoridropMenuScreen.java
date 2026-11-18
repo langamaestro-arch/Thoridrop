@@ -312,7 +312,7 @@ public final class ThoridropMenuScreen extends Screen {
                         cx+23,yy+22,MUTED);
                 }
                 centered(g,"Artículos "+(marketItemsPage+1)+"/"+pageCount(),
-                    cx+(w-side-56)/2,y+h-86,DARK);
+                    cx+(w-side-56)/2,y+h-105,DARK);
                 line(g,"Saldo: "+balance()+" · Compra con confirmación",cx,y+h-54,DARK);
                 if(java.util.stream.IntStream.range(0,NAMES.length)
                     .anyMatch(i->GROUP[i].equals(CATEGORIES[marketPage])&&balance()<COST[i]))
