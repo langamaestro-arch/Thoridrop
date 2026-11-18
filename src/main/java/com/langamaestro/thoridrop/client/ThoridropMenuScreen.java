@@ -83,7 +83,7 @@ public final class ThoridropMenuScreen extends Screen {
         paintButtons.clear();
         for(int i=0;i<TABS.length;i++) {
             final int selected=i;
-            addStyled(TABS[i],x+25,y+119+i*(tabHeight-2),side-38,tabHeight-5,
+            addStyled(TABS[i],x+25,y+121+i*(tabHeight-4),side-38,tabHeight-9,
                 TAB_ITEMS[i],tab==i,()->{tab=selected;confirmId=-1;rebuildWidgets();});
         }
         addStyled("X",x+w-49,y+21,27,23,null,false,this::onClose);
@@ -265,7 +265,7 @@ public final class ThoridropMenuScreen extends Screen {
                     line(g,font.plainSubstrByWidth(players[i],w-side-88),cx+6,yy+3,INK);
                 }
                 // Page label above the navigation controls, with a single render only.
-                centered(g,"Página "+(rankPage+1)+" de 4",cx+(w-side-56)/2,y+h-75,MUTED);
+                centered(g,"Página "+(rankPage+1)+" de 4",cx+(w-side-56)/2,y+h-87,MUTED);
             }
             case 3 -> {
                 section(g,"MERCADO DE RECOMPENSAS",Items.EMERALD);
