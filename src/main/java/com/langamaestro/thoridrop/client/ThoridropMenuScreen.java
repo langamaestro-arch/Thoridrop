@@ -13,12 +13,22 @@ import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 public final class ThoridropMenuScreen extends Screen {
-    private static final int GOLD=0xFFFFC56B, WHITE=0xFFF7E6CE, MUTED=0xFFB7A9C9;
-    private static final String[] TABS={"Estadísticas","Logros","Clasificación","Mercado","Desafíos","Información"};
+    // Exact visual palette from EvolutionCraft ProgressScreen.
+    private static final int GOLD=0xFFF2CC71, WHITE=0xFFF4F0E4, MUTED=0xFFB0BBC5;
+    private static final int GREEN=0xFF77DA9B, EDGE=0xFF806844;
+    private static final int BACK=0xFF17212A, INNER=0xFF22313B;
+    private static final String[] TABS={"Estadísticas","Logros","Clasificación","Mercado","Desafíos","Misiones","Colección","Información"};
+    private static final net.minecraft.world.item.Item[] TAB_ITEMS={
+        Items.BOOK,Items.NETHER_STAR,Items.PAPER,Items.EMERALD,
+        Items.IRON_SWORD,Items.CLOCK,Items.NETHERITE_AXE,Items.COMPASS};
     private static String snapshot="";
     private int tab=0;
     private int x,y,w,h;
     private int marketPage=0,rankPage=0,rankMode=0,confirmId=-1;
+    private int progressLevel() {try{return Integer.parseInt(rows()[15].split(",")[0]);}catch(Exception e){return 1;}}
+    private int progressXp() {try{return Integer.parseInt(rows()[15].split(",")[1]);}catch(Exception e){return 0;}}
+    private int prestigeCount() {try{return Integer.parseInt(rows()[15].split(",")[2]);}catch(Exception e){return 0;}}
+    private String rankTitle() {try{return rows()[15].split(",")[3];}catch(Exception e){return "Recluta";}}
     private static final String[] CATEGORIES={"Materiales","Armas","Armaduras","Herramientas","Consumibles"};
     private static final String[] NAMES={"Hierro x16","Diamantes x5","Manzanas doradas x4","Espada del guardián",
         "Peto de diamante","Pico de diamante","Arco mítico","Casco de netherita",
@@ -59,7 +69,7 @@ public final class ThoridropMenuScreen extends Screen {
     @Override
     protected void init() {
         w=Math.min(this.width-14,500);
-        h=Math.min(this.height-14,276);
+        h=Math.min(this.height-14,330);
         x=(this.width-w)/2;
         y=(this.height-h)/2;
         int left=120;
@@ -69,12 +79,18 @@ public final class ThoridropMenuScreen extends Screen {
                 tab=selected;
                 confirmId=-1;
                 rebuildWidgets();
-            }).bounds(x+12,y+41+i*30,left,23).build());
+            }).bounds(x+12,y+43+i*29,left,23).build());
         }
         addRenderableWidget(Button.builder(Component.literal("↻"),button->refresh())
             .bounds(x+w-66,y+9,24,20).build());
         addRenderableWidget(Button.builder(Component.literal("X"),button->onClose())
             .bounds(x+w-38,y+9,24,20).build());
+        if(tab==0 && progressLevel()>=100) {
+            addRenderableWidget(Button.builder(Component.literal("Obtener prestigio"),
+                button->{ClientPacketDistributor.sendToServer(
+                    new ThoridropMenuNetwork.MenuRequest(20));})
+                .bounds(x+w-153,y+h-33,139,21).build());
+        }
         if(tab==2) {
             addRenderableWidget(Button.builder(Component.literal("‹"),button->{
                 rankPage=Math.max(0,rankPage-1); rebuildWidgets();
@@ -126,34 +142,44 @@ public final class ThoridropMenuScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor gfx,int mouseX,int mouseY,float partialTick) {
-        gfx.fill(0,0,width,height,0x9905000C);
-        gfx.fill(x-2,y-2,x+w+2,y+h+2,0xFFB17D32);
-        gfx.fill(x,y,x+w,y+h,0xFF170F27);
-        gfx.fill(x+4,y+4,x+w-4,y+34,0xFF33204E);
-        gfx.fill(x+139,y+38,x+141,y+h-9,0xFF986B35);
-        gfx.fill(x+145,y+39,x+w-10,y+h-10,0xFF231832);
-        gfx.text(font,"✦  THORIDROP  ✦",x+13,y+15,GOLD,true);
+        gfx.fill(0,0,width,height,0xB9000000);
+        gfx.fill(x-4,y-4,x+w+4,y+h+4,EDGE);
+        gfx.fill(x-2,y-2,x+w+2,y+h+2,0xFF0C1217);
+        gfx.fill(x,y,x+w,y+h,BACK);
+        gfx.fill(x+7,y+7,x+w-7,y+37,0xFF2A3C36);
+        gfx.fill(x+7,y+35,x+w-7,y+37,GOLD);
+        gfx.fill(x+139,y+40,x+141,y+h-9,EDGE);
+        gfx.fill(x+145,y+40,x+w-10,y+h-10,0xFF101A22);
+        for(int i=0;i<TABS.length;i++) {
+            int yy=y+43+i*29;
+            if(i==tab)gfx.outline(x+10,yy-2,124,26,GOLD);
+            gfx.item(new ItemStack(TAB_ITEMS[i]),x+15,yy+3);
+        }
+        gfx.text(font,"✦  T H O R I D R O P  ✦",x+13,y+15,GOLD,true);
         gfx.text(font,"Puntos: "+balance(),x+152,y+15,0xFFFFDE8B,true);
         int[] a=stats();
-        int cx=x+153, cy=y+50;
+        int cx=x+153, cy=y+54;
         switch(tab) {
             case 0 -> {
                 line(gfx,"ESTADÍSTICAS PERSONALES",cx,cy,GOLD);
-                entry(gfx,"Victorias",a[0],cx,cy+20);
-                line(gfx,"Normal "+a[1]+"  Mítico "+a[2]+"  Legendario "+a[3],cx,cy+33,MUTED);
-                entry(gfx,"Recompensas",a[4],cx,cy+49);
-                entry(gfx,"Muertes",a[5],cx,cy+62);
-                entry(gfx,"Sin morir",a[6],cx,cy+75);
-                divider(gfx,cy+90);
-                entry(gfx,"Enemigos",a[7],cx,cy+100);
-                entry(gfx,"Impactos",a[8],cx,cy+113);
-                entry(gfx,"Racha / Máxima",a[9],cx,cy+126);
-                line(gfx,"Racha máxima "+a[10],cx,cy+139,MUTED);
-                line(gfx,"Mejor tiempo: "+(a[11]<=0?"Sin récord":(a[11]/20)+"s"),cx,cy+152,WHITE);
-                line(gfx,"Victorias cooperativas: "+a[12],cx,cy+165,WHITE);
+                line(gfx,"Nivel "+progressLevel()+"/100 · "+rankTitle()+" · Prestigio "+prestigeCount(),cx,cy+13,GREEN);
+                gfx.fill(cx,cy+25,x+w-15,cy+33,0xFF0A141B);
+                gfx.fill(cx+1,cy+26,cx+1+Math.max(0,(w-173)*((progressXp()%100))/100),cy+32,GREEN);
+                entry(gfx,"Victorias",a[0],cx,cy+40);
+                line(gfx,"Normal "+a[1]+"  Mítico "+a[2]+"  Legendario "+a[3],cx,cy+53,MUTED);
+                entry(gfx,"Recompensas",a[4],cx,cy+69);
+                entry(gfx,"Muertes",a[5],cx,cy+82);
+                entry(gfx,"Sin morir",a[6],cx,cy+95);
+                divider(gfx,cy+110);
+                entry(gfx,"Enemigos",a[7],cx,cy+120);
+                entry(gfx,"Impactos",a[8],cx,cy+133);
+                entry(gfx,"Racha",a[9],cx,cy+146);
+                line(gfx,"Racha máxima "+a[10],cx,cy+159,MUTED);
+                line(gfx,"Mejor tiempo: "+(a[11]<=0?"Sin récord":(a[11]/20)+"s"),cx,cy+172,WHITE);
+                line(gfx,"Victorias cooperativas: "+a[12],cx,cy+185,WHITE);
                 String[] rr=rows();
                 if(rr.length>14)line(gfx,"Historial: "+font.plainSubstrByWidth(
-                    rr[14].split("\\|")[0],w-175),cx,cy+181,MUTED);
+                    rr[14].split("\\|")[0],w-175),cx,cy+202,MUTED);
             }
             case 1 -> {
                 line(gfx,"LOGROS THORIDROP",cx,cy,GOLD);
@@ -189,7 +215,7 @@ public final class ThoridropMenuScreen extends Screen {
                 for(int i=0;i<NAMES.length;i++) {
                     if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
                     int yy=cy+53+row*45;
-                    gfx.fill(cx-3,yy-3,x+w-11,yy+38,0xFF342444);
+                    gfx.fill(cx-3,yy-3,x+w-11,yy+38,INNER);
                     gfx.item(new ItemStack(ICONS[i]),cx+3,yy+5);
                     line(gfx,NAMES[i],cx+26,yy+7,WHITE);
                     line(gfx,"Precio: "+COST[i]+" pts"+
@@ -209,6 +235,30 @@ public final class ThoridropMenuScreen extends Screen {
                 line(gfx,"Élites  •  Contrarreloj",cx,cy+115,WHITE);
                 line(gfx,"Oleada sorpresa",cx,cy+128,WHITE);
                 line(gfx,"El jefe final conserva su IA original.",cx,cy+155,MUTED);
+            }
+            case 5 -> {
+                line(gfx,"MISIONES DIARIAS Y SEMANALES",cx,cy,GOLD);
+                String[] missions=rows().length>16?rows()[16].split("\\|"):new String[0];
+                for(int i=0;i<missions.length;i++) {
+                    int my=cy+24+i*54;
+                    gfx.fill(cx-4,my-5,x+w-12,my+39,INNER);
+                    gfx.fill(cx-4,my-5,cx-1,my+39,GREEN);
+                    line(gfx,font.plainSubstrByWidth(missions[i],w-180),cx+6,my+9,WHITE);
+                }
+                line(gfx,"Reinicio diario y semanal: UTC",cx,cy+206,MUTED);
+                line(gfx,"Puntos otorgados al recoger el cofre",cx,cy+219,MUTED);
+            }
+            case 6 -> {
+                line(gfx,"COLECCIÓN DE EQUIPO EXCLUSIVO",cx,cy,GOLD);
+                String raw=rows().length>17?rows()[17]:"Sin piezas registradas";
+                String[] pieces=raw.split(" \\| ");
+                for(int i=0;i<pieces.length;i++) {
+                    int py=cy+29+i*48;
+                    gfx.fill(cx-4,py-5,x+w-12,py+34,INNER);
+                    gfx.item(new ItemStack(i==0?Items.DIAMOND_AXE:Items.NETHERITE_AXE),cx+5,py+5);
+                    line(gfx,pieces[i],cx+32,py+9,WHITE);
+                }
+                line(gfx,"Recompensas exclusivas: mítico y legendario",cx,cy+155,MUTED);
             }
             default -> {
                 line(gfx,"INFORMACIÓN Y AYUDA",cx,cy,GOLD);
