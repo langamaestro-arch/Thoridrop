@@ -14,18 +14,18 @@ import net.minecraft.world.entity.item.ItemEntity;
 public final class ThoridropShop {
     public record Offer(int id, String group, String title, int cost, Item item, int amount, int enchantLevel) {}
     private static final List<Offer> OFFERS = List.of(
-        new Offer(1,"Materiales","Hierro x16",15,Items.IRON_INGOT,16,0),
-        new Offer(2,"Materiales","Diamantes x5",60,Items.DIAMOND,5,0),
-        new Offer(3,"Consumibles","Manzanas doradas x4",85,Items.GOLDEN_APPLE,4,0),
-        new Offer(4,"Armas","Espada del guardián",250,Items.NETHERITE_SWORD,1,37),
-        new Offer(5,"Armaduras","Peto de diamante",140,Items.DIAMOND_CHESTPLATE,1,28),
-        new Offer(6,"Herramientas","Pico de diamante",125,Items.DIAMOND_PICKAXE,1,30),
-        new Offer(7,"Armas","Arco mítico",190,Items.BOW,1,36),
-        new Offer(8,"Armaduras","Casco de netherita",280,Items.NETHERITE_HELMET,1,42),
-        new Offer(9,"Consumibles","Zanahorias doradas x12",95,Items.GOLDEN_CARROT,12,0),
-        new Offer(10,"Materiales","Esmeraldas x12",55,Items.EMERALD,12,0),
-        new Offer(11,"Herramientas","Hacha legendaria",245,Items.NETHERITE_AXE,1,40),
-        new Offer(12,"Consumibles","Flechas x64",35,Items.ARROW,64,0)
+        new Offer(1,"Materiales","Hierro x16",60,Items.IRON_INGOT,16,0),
+        new Offer(2,"Materiales","Diamantes x5",240,Items.DIAMOND,5,0),
+        new Offer(3,"Consumibles","Manzanas doradas x4",340,Items.GOLDEN_APPLE,4,0),
+        new Offer(4,"Armas","Espada del guardián",1000,Items.NETHERITE_SWORD,1,37),
+        new Offer(5,"Armaduras","Peto de diamante",560,Items.DIAMOND_CHESTPLATE,1,28),
+        new Offer(6,"Herramientas","Pico de diamante",500,Items.DIAMOND_PICKAXE,1,30),
+        new Offer(7,"Armas","Arco mítico",760,Items.BOW,1,36),
+        new Offer(8,"Armaduras","Casco de netherita",1120,Items.NETHERITE_HELMET,1,42),
+        new Offer(9,"Consumibles","Zanahorias doradas x12",380,Items.GOLDEN_CARROT,12,0),
+        new Offer(10,"Materiales","Esmeraldas x12",220,Items.EMERALD,12,0),
+        new Offer(11,"Herramientas","Hacha legendaria",980,Items.NETHERITE_AXE,1,40),
+        new Offer(12,"Consumibles","Flechas x64",140,Items.ARROW,64,0)
     );
     private ThoridropShop() {}
     public static List<Offer> offers() { return OFFERS; }
