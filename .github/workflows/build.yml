@@ -52,10 +52,13 @@ jobs:
             thoridrop/src/main/java/com/langamaestro/thoridrop/RewardLedger.java \
             thoridrop/src/main/java/com/langamaestro/thoridrop/DropPoints.java \
             thoridrop/src/main/java/com/langamaestro/thoridrop/DropStatistics.java \
+            thoridrop/src/main/java/com/langamaestro/thoridrop/ThoridropCheckpoint.java \
             thoridrop/src/test/java/com/langamaestro/thoridrop/CoreLogicTest.java \
-            thoridrop/src/test/java/com/langamaestro/thoridrop/ProgressionTest.java
+            thoridrop/src/test/java/com/langamaestro/thoridrop/ProgressionTest.java \
+            thoridrop/src/test/java/com/langamaestro/thoridrop/CheckpointTest.java
           java -cp test-classes com.langamaestro.thoridrop.CoreLogicTest
           java -cp test-classes com.langamaestro.thoridrop.ProgressionTest
+          java -cp test-classes com.langamaestro.thoridrop.CheckpointTest
       - name: Build with Gradle
         working-directory: mdk
         run: |
