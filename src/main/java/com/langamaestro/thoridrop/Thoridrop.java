@@ -965,6 +965,44 @@ public final class Thoridrop {
         for (ServerPlayer p : dropLevel.players()) p.sendSystemMessage(Component.literal(message));
     }
 
+    /**
+     * Find a safe standing position on ordinary terrain, paths or snow layers.
+     * Do not alter blocks or place enemies within eight blocks of the crate.
+     */
+    private BlockPos findSafeWaveSpawn(double angle,int slot) {
+        if(dropLevel==null || dropPosition==null) return null;
+        for(int attempt=0;attempt<120;attempt++) {
+            int radius=10+(attempt/24)*4;
+            double offset=angle+attempt*(Math.PI*2.0/24.0)+slot*0.01;
+            int px=dropPosition.getX()+(int)Math.round(Math.cos(offset)*radius);
+            int pz=dropPosition.getZ()+(int)Math.round(Math.sin(offset)*radius);
+            if(Math.abs(px-dropPosition.getX())<8 && Math.abs(pz-dropPosition.getZ())<8)continue;
+            BlockPos top=dropLevel.getHeightmapPos(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                new BlockPos(px,dropPosition.getY(),pz));
+            // Heightmaps may return a snow layer, foliage or the air above a path.
+            for(int dy=2;dy>=-3;dy--) {
+                BlockPos feet=top.offset(0,dy,0);
+                BlockPos below=feet.below();
+                var floor=dropLevel.getBlockState(below);
+                if(floor.getCollisionShape(dropLevel,below).isEmpty()) {
+                    // A thin snow layer lies above a valid full support block.
+                    if(!floor.is(net.minecraft.world.level.block.Blocks.SNOW)
+                        || dropLevel.getBlockState(below.below())
+                             .getCollisionShape(dropLevel,below.below()).isEmpty())continue;
+                }
+                if(!dropLevel.getBlockState(feet).getCollisionShape(dropLevel,feet).isEmpty()
+                    || !dropLevel.getBlockState(feet.above()).getCollisionShape(dropLevel,feet.above()).isEmpty()
+                    || !dropLevel.getFluidState(feet).isEmpty()
+                    || !dropLevel.getFluidState(feet.above()).isEmpty())continue;
+                // Keep mobs around the heightmap surface, never in underground cavities.
+                if(Math.abs(feet.getY()-top.getY())>2)continue;
+                return feet.immutable();
+            }
+        }
+        return null;
+    }
+
     private void spawnWave() {
         if (session == null || session.phase() != DropSession.Phase.COMBAT) return;
         waveMobs.clear();
@@ -1034,32 +1072,9 @@ public final class Thoridrop {
         }
         for (int i = 0; i < count; i++) {
             double angle = 2 * Math.PI * i / count;
-            int x = dropPosition.getX() + (int)Math.round(Math.cos(angle) * 9);
-            int z = dropPosition.getZ() + (int)Math.round(Math.sin(angle) * 9);
-            BlockPos spawn = dropLevel.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, dropPosition.getY(), z));
-            // Never spawn an enemy on or immediately beside the supply crate.
-            // Search around the ring instead of falling back onto the crate itself.
-            boolean validSpawn = false;
-            for (int attempt = 0; attempt < 24; attempt++) {
-                double candidateAngle = angle + attempt * (Math.PI * 2.0 / 24.0);
-                int radius = 10 + attempt / 8 * 3;
-                int candidateX = dropPosition.getX() + (int)Math.round(Math.cos(candidateAngle) * radius);
-                int candidateZ = dropPosition.getZ() + (int)Math.round(Math.sin(candidateAngle) * radius);
-                BlockPos candidate = dropLevel.getHeightmapPos(
-                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    new BlockPos(candidateX, dropPosition.getY(), candidateZ));
-                if (Math.abs(candidate.getX() - dropPosition.getX()) < 8
-                    && Math.abs(candidate.getZ() - dropPosition.getZ()) < 8) continue;
-                if (!dropLevel.getBlockState(candidate).isAir()
-                    || !dropLevel.getBlockState(candidate.above()).isAir()
-                    || !dropLevel.getBlockState(candidate.above(2)).isAir()) continue;
-                if (!dropLevel.getBlockState(candidate.below()).isSolidRender()) continue;
-                spawn = candidate;
-                validSpawn = true;
-                break;
-            }
-            if (!validSpawn) {
-                LOGGER.warn("Thoridrop: no valid spawn away from crate for enemy {}", i);
+            BlockPos spawn=findSafeWaveSpawn(angle,i);
+            if(spawn==null) {
+                LOGGER.warn("Thoridrop: no safe spawn for wave {} enemy {}, will retry if all fail",wave,i);
                 continue;
             }
             String mobId = mobIds[i % mobIds.length];
@@ -1090,27 +1105,12 @@ public final class Thoridrop {
             if (entity instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
-        if (waveMobs.isEmpty()) {
-            net.minecraft.world.entity.Entity fallback = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(net.minecraft.resources.Identifier.parse("minecraft:ravager")).create(dropLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT);
-            if (fallback != null) {
-                // The fallback must obey the same exclusion zone as every other mob.
-                for (int attempt = 0; attempt < 24; attempt++) {
-                    double a = attempt * Math.PI * 2.0 / 24.0;
-                    int fx = dropPosition.getX() + (int)Math.round(Math.cos(a) * 12);
-                    int fz = dropPosition.getZ() + (int)Math.round(Math.sin(a) * 12);
-                    BlockPos candidate = dropLevel.getHeightmapPos(
-                        net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                        new BlockPos(fx, dropPosition.getY(), fz));
-                    if (!dropLevel.getBlockState(candidate).isAir()
-                        || !dropLevel.getBlockState(candidate.above()).isAir()
-                        || !dropLevel.getBlockState(candidate.above(2)).isAir()
-                        || !dropLevel.getBlockState(candidate.below()).isSolidRender()) continue;
-                    fallback.setPos(candidate.getX() + 0.5, candidate.getY(), candidate.getZ() + 0.5);
-                    if (fallback instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
-                    if (dropLevel.addFreshEntity(fallback)) waveMobs.add(fallback.getUUID());
-                    break;
-                }
-            }
+        if(waveMobs.isEmpty()) {
+            // Never count an empty wave as completed. Retry terrain on the next delay.
+            waveDelay=100;
+            broadcast("Thoridrop: buscando zona segura para los enemigos (reintento en 5 s).");
+            LOGGER.warn("Thoridrop wave {} could not spawn enemies; retry scheduled",wave);
+            return;
         }
         waveTotal = waveMobs.size();
         session.setWaveEnemyCount(waveTotal);
