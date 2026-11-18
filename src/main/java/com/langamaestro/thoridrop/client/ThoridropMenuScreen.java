@@ -39,7 +39,7 @@ public final class ThoridropMenuScreen extends Screen {
         Items.DIAMOND_CHESTPLATE,Items.DIAMOND_PICKAXE,Items.BOW,Items.NETHERITE_HELMET,
         Items.GOLDEN_CARROT,Items.EMERALD,Items.NETHERITE_AXE,Items.ARROW};
     private static String snapshot="";
-    private int tab=0,marketPage=0,rankPage=0,rankMode=0,confirmId=-1;
+    private int tab=0,marketPage=0,rankPage=0,rankMode=0,missionPage=0,collectionPage=0,confirmId=-1;
     private int x,y,w,h,cx,cy,side,tabHeight;
     private final List<PaintButton> paintButtons=new ArrayList<>();
     private record PaintButton(int bx,int by,int bw,int bh,String label,Item icon,boolean active,boolean enabled) {}
@@ -95,6 +95,18 @@ public final class ThoridropMenuScreen extends Screen {
             addStyled(">",x+w-48,y+h-48,25,24,null,false,()->{rankPage=Math.min(3,rankPage+1);rebuildWidgets();});
             addStyled("Cambiar ranking",cx+37,y+h-48,125,24,null,true,()->{
                 rankMode=(rankMode+1)%3;rankPage=0;rebuildWidgets();});
+        }
+        if(tab==5 || tab==6) {
+            addStyled("<",cx,y+h-48,25,24,null,false,()->{
+                if(tab==5)missionPage=Math.max(0,missionPage-1);
+                else collectionPage=Math.max(0,collectionPage-1);
+                rebuildWidgets();
+            });
+            addStyled(">",x+w-48,y+h-48,25,24,null,false,()->{
+                if(tab==5)missionPage=Math.min(1,missionPage+1);
+                else collectionPage=Math.min(1,collectionPage+1);
+                rebuildWidgets();
+            });
         }
         if(tab==3) {
             addStyled("<",cx,y+144,25,22,null,false,()->{
@@ -310,25 +322,38 @@ public final class ThoridropMenuScreen extends Screen {
             case 5 -> {
                 section(g,"MISIONES DIARIAS Y SEMANALES",Items.CLOCK);
                 String[] missions=rows().length>16?rows()[16].split("\\|"):new String[0];
-                for(int i=0;i<Math.min(3,missions.length);i++){
-                    int yy=cy+39+i*67;
-                    strip(g,cx-5,yy-5,w-side-65,58,missions[i].contains("COBRADA"));
-                    line(g,font.plainSubstrByWidth(missions[i],w-side-89),cx+5,yy+14,INK);
+                for(int i=0;i<4;i++){
+                    int index=missionPage*4+i;
+                    if(index>=missions.length)break;
+                    int yy=cy+38+i*55;
+                    boolean done=missions[index].contains("COBRADA");
+                    strip(g,cx-5,yy-5,w-side-65,46,done);
+                    line(g,font.plainSubstrByWidth(missions[index],w-side-90),
+                        cx+7,yy+12,done?GREEN:INK);
                 }
-                line(g,"Reinicio UTC · Cobro al recoger el cofre",cx,cy+251,MUTED);
+                centered(g,"Misiones "+(missionPage+1)+"/2 · Renovación UTC",
+                    cx+(w-side-56)/2,y+h-75,MUTED);
             }
             case 6 -> {
                 section(g,"COLECCIÓN DE EQUIPO EXCLUSIVO",Items.NETHERITE_AXE);
                 String[] pieces=rows().length>17?rows()[17].split("\\|"):new String[0];
-                Item[] icons={Items.DIAMOND_AXE,Items.DIAMOND_SWORD,Items.DIAMOND_PICKAXE,
-                    Items.NETHERITE_AXE,Items.NETHERITE_SWORD,Items.NETHERITE_CHESTPLATE};
-                for(int i=0;i<Math.min(6,pieces.length);i++){
+                Item[] icons={
+                    Items.DIAMOND_AXE,Items.DIAMOND_SWORD,Items.DIAMOND_PICKAXE,
+                    Items.BOW,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_SHOVEL,
+                    Items.NETHERITE_AXE,Items.NETHERITE_SWORD,Items.NETHERITE_CHESTPLATE,
+                    Items.BOW,Items.NETHERITE_PICKAXE,Items.NETHERITE_BOOTS};
+                for(int i=0;i<6;i++){
+                    int index=collectionPage*6+i;
+                    if(index>=pieces.length)break;
                     int yy=cy+30+i*36;
-                    boolean owned=pieces[i].contains("✔");
+                    boolean owned=pieces[index].contains("✔");
                     strip(g,cx-5,yy-5,w-side-65,31,owned);
-                    g.item(new ItemStack(icons[i]),cx+5,yy+2);
-                    line(g,font.plainSubstrByWidth(pieces[i],w-side-110),cx+28,yy+7,owned?GREEN:INK);
+                    g.item(new ItemStack(icons[index]),cx+5,yy+2);
+                    line(g,font.plainSubstrByWidth(pieces[index],w-side-110),
+                        cx+28,yy+7,owned?GREEN:INK);
                 }
+                centered(g,"Colección "+(collectionPage+1)+"/2 · 12 piezas",
+                    cx+(w-side-56)/2,y+h-75,MUTED);
             }
             default -> {
                 section(g,"INFORMACIÓN Y AYUDA",Items.COMPASS);
