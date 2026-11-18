@@ -117,7 +117,16 @@ public final class ThoridropProgression {
         save();
     }
     public static synchronized String collection(UUID id) {
-        return "Hacha mítica: "+(Boolean.parseBoolean(STATE.getProperty(id+".collection.mythic_axe"))?"✔":"○")
-            +" | Hacha legendaria: "+(Boolean.parseBoolean(STATE.getProperty(id+".collection.legendary_axe"))?"✔":"○");
+        String[] names={"Hacha mítica","Espada mítica","Pico mítico",
+            "Hacha legendaria","Espada legendaria","Coraza legendaria"};
+        String[] ids={"mythic_axe","mythic_blade","mythic_tool",
+            "legendary_axe","legendary_blade","legendary_armor"};
+        StringBuilder b=new StringBuilder();
+        for(int i=0;i<ids.length;i++) {
+            if(i>0)b.append("|");
+            b.append(names[i]).append(": ").append(
+                Boolean.parseBoolean(STATE.getProperty(id+".collection."+ids[i],"false"))?"✔":"○");
+        }
+        return b.toString();
     }
 }
