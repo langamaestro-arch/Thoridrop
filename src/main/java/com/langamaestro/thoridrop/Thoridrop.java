@@ -53,6 +53,8 @@ public final class Thoridrop {
     private final java.util.Map<UUID,Integer> playerOutOfRangeTicks = new java.util.HashMap<>();
     private int abandonSeconds = 180;
     private int combatTicks;
+    private boolean checkedRecovery;
+    private int emptyWaveRetries;
     private int timedChallengeSeconds = 480;
     private int shopPointsNormal = 20, shopPointsMythic = 55, shopPointsLegendary = 130;
     private int cooperativeBonusPoints = 15;
@@ -352,6 +354,9 @@ public final class Thoridrop {
         dropLevel = level;
         dropPosition = pos.immutable();
         session = new DropSession(UUID.randomUUID(), rarity, 5);
+        ThoridropCheckpoint.write(new ThoridropCheckpoint.Snapshot(
+            session.eventId(),dropLevel.dimension().toString(),pos.getX(),pos.getY(),pos.getZ(),
+            rarity,"AVAILABLE"));
         specialEvent = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < specialEventChance;
         modifierType = java.util.concurrent.ThreadLocalRandom.current().nextInt(100) < randomModifierChance
             ? 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(6) : 0;
@@ -373,6 +378,7 @@ public final class Thoridrop {
         eventDeaths.clear();
         eventHits.clear();
         eventKills.clear();
+        emptyWaveRetries=0;
         combatTicks = 0;
         timedChallengeSucceeded = false;
         teamSizeAtVictory = 0;
@@ -395,6 +401,56 @@ public final class Thoridrop {
         player.sendSystemMessage(Component.literal("Thoridrop " + rarityName(rarity)
                 + " supply crate at " + pos.toShortString() + ". Right-click to activate."));
         return 1;
+    }
+
+    /** An interrupted combat resumes as an unopened challenge at the same crate.
+     *  A REWARDS checkpoint is cleaned, never reissued, to prevent duplicated loot.
+     */
+    private void restorePreviousChallenge(net.minecraft.server.MinecraftServer server) {
+        ThoridropCheckpoint.Snapshot old;
+        try{old=ThoridropCheckpoint.read();}catch(RuntimeException ex) {
+            LOGGER.error("Thoridrop checkpoint unreadable; keeping stable gameplay",ex);
+            return;
+        }
+        if(old==null)return;
+        for(ServerLevel level:server.getAllLevels()) {
+            if(!level.dimension().toString().equals(old.dimension()))continue;
+            BlockPos pos=new BlockPos(old.x(),old.y(),old.z());
+            level.getChunkAt(pos);
+            Block at=level.getBlockState(pos).getBlock();
+            if(!isSupplyCrate(at)) {ThoridropCheckpoint.clear();return;}
+            if(old.phase().equals("REWARDS")) {
+                level.removeBlock(pos,false);
+                ThoridropCheckpoint.clear();
+                LOGGER.info("Discarded interrupted completed crate {} without replaying rewards",pos);
+                return;
+            }
+            Block closed=switch(old.rarity()) {
+                case COMMON -> DropBlocks.COMMON.get();
+                case RARE -> DropBlocks.RARE.get();
+                case LEGENDARY -> DropBlocks.LEGENDARY.get();
+            };
+            level.setBlockAndUpdate(pos,closed.defaultBlockState());
+            session=new DropSession(old.id(),old.rarity(),5);
+            dropLevel=level;dropPosition=pos.immutable();arrivalTicks=0;
+            availableTicks=0;chestOpen=false;chestOpeningTicks=-1;
+            specialEvent=false;modifierType=0;rewardTicks=0;
+            participants.clear();claimedRewards.clear();completedStats.clear();
+            eventHits.clear();eventKills.clear();eventDeaths.clear();waveMobs.clear();
+            eventBar=new net.minecraft.server.level.ServerBossEvent(
+                UUID.randomUUID(),Component.literal("✦ THORIDROP  •  "+rarityName(old.rarity())),
+                switch(old.rarity()) {
+                    case COMMON -> net.minecraft.world.BossEvent.BossBarColor.BLUE;
+                    case RARE -> net.minecraft.world.BossEvent.BossBarColor.PURPLE;
+                    case LEGENDARY -> net.minecraft.world.BossEvent.BossBarColor.RED;
+                },net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS);
+            eventBar.setProgress(1.0f);
+            ThoridropCheckpoint.write(new ThoridropCheckpoint.Snapshot(
+                old.id(),old.dimension(),old.x(),old.y(),old.z(),old.rarity(),"AVAILABLE"));
+            LOGGER.info("Recovered interrupted Thoridrop {} at {}: restart by activating crate",old.rarity(),pos);
+            return;
+        }
+        LOGGER.warn("Thoridrop checkpoint dimension not loaded: {}",old.dimension());
     }
 
     private boolean isSupplyCrate(Block block) {
@@ -446,6 +502,10 @@ public final class Thoridrop {
             }
         }
         if (!configLoaded) loadConfig();
+        if(!checkedRecovery) {
+            checkedRecovery=true;
+            restorePreviousChallenge(event.getServer());
+        }
         if (session == null) {
             // Defensive cleanup of stale boss bars even after an interrupted event.
             if (eventBar != null || !locatorBars.isEmpty()) clearHud();
@@ -532,6 +592,10 @@ public final class Thoridrop {
                     }
                 }
                 if (session.phase() == DropSession.Phase.REWARDS) {
+                    // Recovery must never replay completed claims.
+                    ThoridropCheckpoint.write(new ThoridropCheckpoint.Snapshot(
+                        session.eventId(),dropLevel.dimension().toString(),dropPosition.getX(),
+                        dropPosition.getY(),dropPosition.getZ(),session.rarity(),"REWARDS"));
                     // A spectator standing by the crate does not earn a reward.
                     participants.removeIf(id -> eventHits.getOrDefault(id,0) == 0 &&
                         eventKills.getOrDefault(id,0) == 0);
@@ -1114,12 +1178,21 @@ public final class Thoridrop {
             if (dropLevel.addFreshEntity(entity)) waveMobs.add(entity.getUUID());
         }
         if(waveMobs.isEmpty()) {
-            // Never count an empty wave as completed. Retry terrain on the next delay.
+            // Repeatedly failing to find a safe location cannot lock the server forever.
+            if(++emptyWaveRetries>=12) {
+                broadcast("Thoridrop: no hay terreno apto para enemigos. Desafío cancelado sin recompensas.");
+                if(dropLevel!=null && dropPosition!=null && isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock()))
+                    dropLevel.removeBlock(dropPosition,false);
+                removeBeaconLight();clearHud();session.finish();session=null;
+                dropLevel=null;dropPosition=null;ThoridropCheckpoint.clear();
+                return;
+            }
             waveDelay=100;
             broadcast("Thoridrop: buscando zona segura para los enemigos (reintento en 5 s).");
             LOGGER.warn("Thoridrop wave {} could not spawn enemies; retry scheduled",wave);
             return;
         }
+        emptyWaveRetries=0;
         waveTotal = waveMobs.size();
         session.setWaveEnemyCount(waveTotal);
         broadcast("THORIDROP - Wave " + wave + "/5: " + waveMobs.size() + " enemies!");
@@ -1264,6 +1337,9 @@ public final class Thoridrop {
             return;
         }
         if (session.activate()) {
+            ThoridropCheckpoint.write(new ThoridropCheckpoint.Snapshot(
+                session.eventId(),dropLevel.dimension().toString(),dropPosition.getX(),
+                dropPosition.getY(),dropPosition.getZ(),session.rarity(),"COMBAT"));
             waveDelay = 40;
             broadcast("Thoridrop activated! Wave 1 begins in 2 seconds.");
         }
