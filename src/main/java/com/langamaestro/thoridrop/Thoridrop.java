@@ -989,7 +989,7 @@ public final class Thoridrop {
     void menuPurchase(ServerPlayer player,int offerId) {
         if(offerId==20) {
             ThoridropProgression.prestige(player);
-        } else if(offerId>=1 && offerId<=12) {
+        } else if((offerId>=1 && offerId<=12) || (offerId>=21 && offerId<=29)) {
             ThoridropShop.buy(player,offerId);
         }
     }
