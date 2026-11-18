@@ -246,7 +246,7 @@ public final class Thoridrop {
                 }))
             .then(Commands.literal("tienda")
                 .executes(context -> {
-                    context.getSource().sendSuccess(() -> Component.literal("§6Tienda Thoridrop§r | hierro: 15 | diamantes: 60 | manzanas: 85 | arma: 250. Compra: /thoridrop tienda comprar <objeto>"), false);
+                    context.getSource().sendSuccess(() -> Component.literal("§6Tienda Thoridrop§r | hierro: 60 | diamantes: 240 | manzanas: 340 | arma: 1000. Compra: /thoridrop tienda comprar <objeto>"), false);
                     return 1;
                 })
                 .then(Commands.literal("comprar")
