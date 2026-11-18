@@ -29,17 +29,28 @@ public final class ThoridropMenuScreen extends Screen {
     private static final String[] CATEGORIES={"Materiales","Armas","Armaduras","Herramientas","Consumibles"};
     private static final String[] NAMES={"Hierro x16","Diamantes x5","Manzanas doradas x4","Espada del guardián",
         "Peto de diamante","Pico de diamante","Arco mítico","Casco de netherita",
-        "Zanahorias doradas x12","Esmeraldas x12","Hacha legendaria","Flechas x64"};
-    private static final int[] COST={60,240,340,1000,560,500,760,1120,380,220,980,140};
-    private static final int[] LEVEL={0,0,0,37,28,30,36,42,0,0,40,0};
+        "Zanahorias doradas x12","Esmeraldas x12","Hacha legendaria","Flechas x64",
+        "Normal · Espada de hierro","Normal · Pico de hierro","Normal · Peto de hierro",
+        "Mítica · Espada de diamante","Mítica · Pico de diamante","Mítica · Peto de diamante",
+        "Legendaria · Espada de netherita","Legendaria · Pico de netherita","Legendaria · Peto de netherita"};
+    private static final int[] COST={60,240,340,1000,560,500,760,1120,380,220,980,140,180,160,200,710,680,790,1450,1380,1600};
+    private static final int[] LEVEL={0,0,0,37,28,30,36,42,0,0,40,0,10,10,10,30,33,33,48,48,48};
     private static final String[] GROUP={"Materiales","Materiales","Consumibles","Armas",
         "Armaduras","Herramientas","Armas","Armaduras","Consumibles",
-        "Materiales","Herramientas","Consumibles"};
+        "Materiales","Herramientas","Consumibles",
+        "Armas","Herramientas","Armaduras","Armas","Herramientas","Armaduras",
+        "Armas","Herramientas","Armaduras"};
     private static final Item[] ICONS={Items.IRON_INGOT,Items.DIAMOND,Items.GOLDEN_APPLE,Items.NETHERITE_SWORD,
         Items.DIAMOND_CHESTPLATE,Items.DIAMOND_PICKAXE,Items.BOW,Items.NETHERITE_HELMET,
-        Items.GOLDEN_CARROT,Items.EMERALD,Items.NETHERITE_AXE,Items.ARROW};
+        Items.GOLDEN_CARROT,Items.EMERALD,Items.NETHERITE_AXE,Items.ARROW,
+        Items.IRON_SWORD,Items.IRON_PICKAXE,Items.IRON_CHESTPLATE,
+        Items.DIAMOND_SWORD,Items.DIAMOND_PICKAXE,Items.DIAMOND_CHESTPLATE,
+        Items.NETHERITE_SWORD,Items.NETHERITE_PICKAXE,Items.NETHERITE_CHESTPLATE};
     private static String snapshot="";
-    private int tab=0,marketPage=0,rankPage=0,rankMode=0,missionPage=0,collectionPage=0,confirmId=-1;
+    private int tab=0,marketPage=0,marketItemsPage=0,rankPage=0,rankMode=0,missionPage=0,collectionPage=0,confirmId=-1;
+    private int offerId(int index){return index<12?index+1:index+9;}
+    private int countOffers(){int count=0;for(String group:GROUP)if(group.equals(CATEGORIES[marketPage]))count++;return count;}
+    private int pageCount(){return Math.max(1,(countOffers()+2)/3);}
     private int x,y,w,h,cx,cy,side,tabHeight;
     private final List<PaintButton> paintButtons=new ArrayList<>();
     private record PaintButton(int bx,int by,int bw,int bh,String label,Item icon,boolean active,boolean enabled) {}
@@ -110,13 +121,19 @@ public final class ThoridropMenuScreen extends Screen {
         }
         if(tab==3) {
             addStyled("<",cx,y+144,25,22,null,false,()->{
-                marketPage=(marketPage+4)%5;confirmId=-1;rebuildWidgets();});
+                marketPage=(marketPage+4)%5;marketItemsPage=0;confirmId=-1;rebuildWidgets();});
             addStyled(">",x+w-48,y+144,25,22,null,false,()->{
-                marketPage=(marketPage+1)%5;confirmId=-1;rebuildWidgets();});
-            int row=0;
+                marketPage=(marketPage+1)%5;marketItemsPage=0;confirmId=-1;rebuildWidgets();});
+            addStyled("<",cx,y+h-91,25,22,null,false,marketItemsPage>0,()->{
+                marketItemsPage=Math.max(0,marketItemsPage-1);confirmId=-1;rebuildWidgets();});
+            addStyled(">",x+w-48,y+h-91,25,22,null,false,marketItemsPage+1<pageCount(),()->{
+                marketItemsPage=Math.min(pageCount()-1,marketItemsPage+1);confirmId=-1;rebuildWidgets();});
+            int rank=0;
             for(int i=0;i<NAMES.length;i++) {
                 if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
-                final int id=i+1;
+                int row=rank++-marketItemsPage*3;
+                if(row<0 || row>=3)continue;
+                final int id=offerId(i);
                 boolean affordable=balance()>=COST[i];
                 addStyled(!affordable?"Sin puntos":confirmId==id?"Confirmar":"Comprar "+COST[i],
                     x+w-121,y+191+row*51,97,22,null,confirmId==id,affordable,()->{
@@ -124,7 +141,6 @@ public final class ThoridropMenuScreen extends Screen {
                         else {confirmId=-1;action(id);}
                         rebuildWidgets();
                     });
-                row++;
             }
         }
     }
@@ -132,7 +148,8 @@ public final class ThoridropMenuScreen extends Screen {
         g.text(font,t,px,py,color,false);
     }
     private void centered(GuiGraphicsExtractor g,String t,int centerX,int py,int color){
-        g.centeredText(font,t,centerX,py,color);
+        // Use a single non-shadowed text pass: centeredText caused ghosted labels in 26.3.
+        g.text(font,t,centerX-font.width(t)/2,py,color,false);
     }
     private void frame(GuiGraphicsExtractor g,int a,int b,int c,int d,int fill) {
         g.fill(a-3,b-3,c+3,d+3,RED);
@@ -282,17 +299,20 @@ public final class ThoridropMenuScreen extends Screen {
             case 3 -> {
                 section(g,"MERCADO DE RECOMPENSAS",Items.EMERALD);
                 line(g,"Categoría: "+CATEGORIES[marketPage],cx+42,y+150,DARK);
-                int row=0;
+                int rank=0;
                 for(int i=0;i<NAMES.length;i++){
                     if(!GROUP[i].equals(CATEGORIES[marketPage]))continue;
+                    int row=rank++-marketItemsPage*3;
+                    if(row<0 || row>=3)continue;
                     int yy=y+184+row*51;
-                    strip(g,cx-7,yy-5,w-side-53,45,confirmId==i+1);
+                    strip(g,cx-7,yy-5,w-side-53,45,confirmId==offerId(i));
                     g.item(new ItemStack(ICONS[i]),cx+2,yy+4);
                     line(g,font.plainSubstrByWidth(NAMES[i],w-side-191),cx+23,yy+6,INK);
                     line(g,"Precio: "+COST[i]+" pts"+(LEVEL[i]>0?" · Encant. "+LEVEL[i]:""),
                         cx+23,yy+22,MUTED);
-                    row++;
                 }
+                centered(g,"Artículos "+(marketItemsPage+1)+"/"+pageCount(),
+                    cx+(w-side-56)/2,y+h-86,DARK);
                 line(g,"Saldo: "+balance()+" · Compra con confirmación",cx,y+h-54,DARK);
                 if(java.util.stream.IntStream.range(0,NAMES.length)
                     .anyMatch(i->GROUP[i].equals(CATEGORIES[marketPage])&&balance()<COST[i]))
