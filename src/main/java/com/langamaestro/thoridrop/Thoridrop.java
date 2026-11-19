@@ -40,6 +40,8 @@ public final class Thoridrop {
     private boolean configLoaded;
     private boolean multiplayerEnabled = true;
     private boolean preserveInventoryOnEventDeath = true;
+    private int maxChallengeRespawns = 5;
+    private final DropRespawnBudget respawnBudget = new DropRespawnBudget(5);
     private int participationRadius = 24;
     private int rewardClaimTimeoutTicks = 20 * 600;
     private int rewardTicks;
@@ -104,6 +106,7 @@ public final class Thoridrop {
         props.setProperty("participation_radius_blocks", "24");
         props.setProperty("reward_claim_timeout_seconds", "600");
         props.setProperty("keep_inventory_on_event_death", "true");
+        props.setProperty("max_event_respawns", "5");
         props.setProperty("mob_count_percent", "100");
         props.setProperty("extra_mobs_per_additional_player", "2");
         props.setProperty("max_extra_mobs", "12");
@@ -138,6 +141,8 @@ public final class Thoridrop {
             extraordinaryExtraMobs = Math.max(0,Math.min(12,Integer.parseInt(props.getProperty("extraordinary_extra_mobs","4"))));
             multiplayerEnabled = Boolean.parseBoolean(props.getProperty("multiplayer_enabled", "true"));
             preserveInventoryOnEventDeath = Boolean.parseBoolean(props.getProperty("keep_inventory_on_event_death", "true"));
+            maxChallengeRespawns = Math.max(0,Math.min(100,Integer.parseInt(props.getProperty("max_event_respawns","5"))));
+            respawnBudget.setLimit(maxChallengeRespawns);
             participationRadius = Math.max(8, Math.min(96, Integer.parseInt(props.getProperty("participation_radius_blocks", "24"))));
             rewardClaimTimeoutTicks = Math.max(30, Math.min(86400, Integer.parseInt(props.getProperty("reward_claim_timeout_seconds", "600")))) * 20;
             mobMultiplierPercent = Math.max(25, Math.min(300, Integer.parseInt(props.getProperty("mob_count_percent", "100"))));
@@ -389,6 +394,7 @@ public final class Thoridrop {
         eventBar.setProgress(1.0f);
         claimedRewards.clear();
         participants.clear();
+        respawnBudget.reset();
         completedStats.clear();
         eventDeaths.clear();
         eventHits.clear();
@@ -461,6 +467,7 @@ public final class Thoridrop {
             availableTicks=0;chestOpen=false;chestOpeningTicks=-1;
             specialEvent=false;extraordinaryVariant=0;modifierType=0;rewardTicks=0;eliteWaveMobs.clear();
             participants.clear();claimedRewards.clear();completedStats.clear();
+            respawnBudget.reset();
             eventHits.clear();eventKills.clear();eventDeaths.clear();waveMobs.clear();
             eventBar=new net.minecraft.server.level.ServerBossEvent(
                 UUID.randomUUID(),Component.literal("✦ THORIDROP  •  "+rarityName(old.rarity())),
@@ -500,7 +507,8 @@ public final class Thoridrop {
                 }
                 iterator.remove();
                 if (session == null || dropLevel == null || dropPosition == null
-                        || session.phase() != DropSession.Phase.COMBAT) continue;
+                        || session.phase() != DropSession.Phase.COMBAT
+                        || respawnBudget.eliminated(pending.getKey())) continue;
                 ServerPlayer player = dropLevel.getServer().getPlayerList().getPlayer(pending.getKey());
                 if (player == null) continue;
                 dropLevel.getChunkAt(dropPosition);
@@ -583,6 +591,7 @@ public final class Thoridrop {
             for (ServerPlayer player : dropLevel.players()) {
                 if ((multiplayerEnabled || participants.isEmpty() || participants.contains(player.getUUID()))
                         && !player.isSpectator() && !player.isCreative()
+                        && !respawnBudget.eliminated(player.getUUID())
                         && player.distanceToSqr(dropPosition.getX() + 0.5, dropPosition.getY() + 0.5, dropPosition.getZ() + 0.5) <= participationRadius * participationRadius) {
                     if(participants.add(player.getUUID())) DropStatistics.remember(player.getUUID(), player.getGameProfile().name());
                     playerOutOfRangeTicks.remove(player.getUUID());
@@ -631,8 +640,8 @@ public final class Thoridrop {
                         session.eventId(),dropLevel.dimension().toString(),dropPosition.getX(),
                         dropPosition.getY(),dropPosition.getZ(),session.rarity(),"REWARDS"));
                     // A spectator standing by the crate does not earn a reward.
-                    participants.removeIf(id -> eventHits.getOrDefault(id,0) == 0 &&
-                        eventKills.getOrDefault(id,0) == 0);
+                    participants.removeIf(id -> respawnBudget.eliminated(id) ||
+                        (eventHits.getOrDefault(id,0) == 0 && eventKills.getOrDefault(id,0) == 0));
                     teamSizeAtVictory = participants.size();
                     if(teamSizeAtVictory>=2) {
                         var scoreboard=new java.util.ArrayList<>(participants);
@@ -1398,26 +1407,36 @@ public final class Thoridrop {
             }
             return;
         }
-        if (!fightingNearDrop(player)) return;
-        if (!preserveInventoryOnEventDeath) {
-            DropStatistics.streak(player.getUUID(),false);
-            DropStatistics.add(player.getUUID(), "deaths");
-            eventDeaths.add(player.getUUID());
-            return;
-        }
-        UUID id = player.getUUID();
+        if (!fightingNearDrop(player) || respawnBudget.eliminated(player.getUUID())) return;
+        UUID id=player.getUUID();
         eventDeaths.add(id);
-        participants.add(id);
-        java.util.List<net.minecraft.world.item.ItemStack> saved = new java.util.ArrayList<>();
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            saved.add(player.getInventory().getItem(i).copy());
-        }
-        deathInventories.put(id, saved);
         DropStatistics.streak(id,false);
-        DropStatistics.add(id, "deaths");
-        respawnPending.add(id);
-        deathExperience.put(id, player.totalExperience);
-        player.sendSystemMessage(Component.literal("Thoridrop: conservarás tu inventario y reaparecerás junto al suministro."));
+        DropStatistics.add(id,"deaths");
+        boolean respawnAtCrate=respawnBudget.onDeath(id);
+
+        // Preserve the existing inventory/experience setting for deaths one through six.
+        // Only the location changes once the Thoridrop respawn allowance is exhausted.
+        if(preserveInventoryOnEventDeath) {
+            java.util.List<net.minecraft.world.item.ItemStack> saved=new java.util.ArrayList<>();
+            for(int i=0;i<player.getInventory().getContainerSize();i++)
+                saved.add(player.getInventory().getItem(i).copy());
+            deathInventories.put(id,saved);
+            deathExperience.put(id,player.totalExperience);
+        }
+        if(respawnAtCrate) {
+            participants.add(id);
+            respawnPending.add(id);
+            player.sendSystemMessage(Component.literal("§6✦ THORIDROP §r| Reapariciones restantes: "
+                +respawnBudget.remaining(id)+"/"+respawnBudget.limit()));
+        } else {
+            respawnPending.remove(id);
+            respawnTeleportQueue.remove(id);
+            participants.remove(id);
+            playerOutOfRangeTicks.remove(id);
+            player.sendSystemMessage(Component.literal(
+                "§c✦ THORIDROP | Has agotado tus reapariciones. Desafío perdido. "
+                +"Volverás a tu punto de reaparición normal."));
+        }
     }
 
     @SubscribeEvent
@@ -1430,16 +1449,18 @@ public final class Thoridrop {
     @SubscribeEvent
     public void onPlayerRespawn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        java.util.List<net.minecraft.world.item.ItemStack> saved = deathInventories.remove(player.getUUID());
-        if (saved == null) return;
-        for (int i = 0; i < saved.size() && i < player.getInventory().getContainerSize(); i++) {
-            player.getInventory().setItem(i, saved.get(i));
+        UUID id=player.getUUID();
+        java.util.List<net.minecraft.world.item.ItemStack> saved=deathInventories.remove(id);
+        if(saved!=null) {
+            for(int i=0;i<saved.size() && i<player.getInventory().getContainerSize();i++)
+                player.getInventory().setItem(i,saved.get(i));
         }
-        Integer experience = deathExperience.remove(player.getUUID());
-        if (experience != null) player.giveExperiencePoints(experience);
-        // Respawn event occurs during vanilla player reconstruction. Move the player
-        // on the next server tick so the vanilla respawn location cannot override it.
-        if (respawnPending.remove(player.getUUID())) respawnTeleportQueue.put(player.getUUID(), 2);
+        Integer experience=deathExperience.remove(id);
+        if(experience!=null)player.giveExperiencePoints(experience);
+        // Vanilla selects the bed/anchor/world spawn. Only the first N Thoridrop deaths
+        // override this on the next server tick; the sixth death uses vanilla unchanged.
+        if(respawnPending.remove(id) && !respawnBudget.eliminated(id))
+            respawnTeleportQueue.put(id,2);
     }
 
     @SubscribeEvent
@@ -1453,7 +1474,8 @@ public final class Thoridrop {
                 event.setCanceled(true);
                 return;
             }
-            if (!participants.contains(player.getUUID())
+            if (respawnBudget.eliminated(player.getUUID()) ||
+                !participants.contains(player.getUUID())
                     || (eventHits.getOrDefault(player.getUUID(),0)==0 &&
                         eventKills.getOrDefault(player.getUUID(),0)==0)) {
                 player.sendSystemMessage(Component.literal("Thoridrop: no participaste en el combate."));
