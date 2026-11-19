@@ -54,6 +54,8 @@ public final class Thoridrop {
     private final java.util.Set<UUID> eventDeaths = new java.util.HashSet<>();
     private final java.util.Map<UUID,Integer> playerOutOfRangeTicks = new java.util.HashMap<>();
     private int abandonSeconds = 180;
+    private int emptyCombatTimeoutSeconds = 180;
+    private int emptyCombatTicks;
     private int combatTicks;
     private boolean checkedRecovery;
     private int emptyWaveRetries;
@@ -113,6 +115,7 @@ public final class Thoridrop {
         props.setProperty("flawless_bonus_diamonds", "2");
         props.setProperty("random_modifier_chance_percent", "25");
         props.setProperty("abandon_timeout_seconds", "180");
+        props.setProperty("empty_combat_timeout_seconds", "180");
         props.setProperty("timed_challenge_seconds", "480");
         props.setProperty("points_normal", "20");
         props.setProperty("points_mythic", "55");
@@ -151,6 +154,8 @@ public final class Thoridrop {
             flawlessDiamondBonus = Math.max(0, Math.min(32, Integer.parseInt(props.getProperty("flawless_bonus_diamonds", "2"))));
             randomModifierChance = Math.max(0, Math.min(100, Integer.parseInt(props.getProperty("random_modifier_chance_percent", "25"))));
             abandonSeconds = Math.max(30, Math.min(3600, Integer.parseInt(props.getProperty("abandon_timeout_seconds", "180"))));
+            emptyCombatTimeoutSeconds = Math.max(30,Math.min(3600,
+                Integer.parseInt(props.getProperty("empty_combat_timeout_seconds","180"))));
             timedChallengeSeconds = Math.max(60, Math.min(3600, Integer.parseInt(props.getProperty("timed_challenge_seconds","480"))));
             shopPointsNormal = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_normal","20"))));
             shopPointsMythic = Math.max(0, Math.min(10000, Integer.parseInt(props.getProperty("points_mythic","55"))));
@@ -168,6 +173,37 @@ public final class Thoridrop {
         DropPoints.load();
         ThoridropProgression.load();
         configLoaded = true;
+    }
+
+    /** Abandoned in-progress challenges must not block all future drops. */
+    private void cancelAbandonedCombat() {
+        if(session==null || session.phase()!=DropSession.Phase.COMBAT)return;
+        broadcast("§c✦ THORIDROP | Desafío cancelado: "+emptyCombatTimeoutSeconds+
+            " segundos sin participantes activos. Sin recompensas.");
+        if(dropLevel!=null) {
+            for(UUID id:waveMobs) {
+                net.minecraft.world.entity.Entity mob=dropLevel.getEntity(id);
+                if(mob!=null)mob.discard();
+            }
+            if(dropPosition!=null && isSupplyCrate(dropLevel.getBlockState(dropPosition).getBlock()))
+                dropLevel.removeBlock(dropPosition,false);
+        }
+        waveMobs.clear();
+        eliteWaveMobs.clear();
+        missingMobTicks.clear();
+        respawnPending.clear();
+        respawnTeleportQueue.clear();
+        participants.clear();
+        playerOutOfRangeTicks.clear();
+        removeBeaconLight();
+        clearHud();
+        session.finish();
+        ThoridropCheckpoint.clear();
+        session=null;
+        dropLevel=null;
+        dropPosition=null;
+        emptyCombatTicks=0;
+        arrivalTicks=0;
     }
 
     private void expireUnclaimedDrop() {
@@ -404,6 +440,7 @@ public final class Thoridrop {
         waveBiomeLabel="Llanura";
         emptyWaveRetries=0;
         combatTicks = 0;
+        emptyCombatTicks = 0;
         timedChallengeSucceeded = false;
         teamSizeAtVictory = 0;
         playerOutOfRangeTicks.clear();
@@ -466,6 +503,7 @@ public final class Thoridrop {
             dropLevel=level;dropPosition=pos.immutable();arrivalTicks=0;
             availableTicks=0;chestOpen=false;chestOpeningTicks=-1;
             specialEvent=false;extraordinaryVariant=0;modifierType=0;rewardTicks=0;eliteWaveMobs.clear();
+            emptyCombatTicks=0;
             participants.clear();claimedRewards.clear();completedStats.clear();
             respawnBudget.reset();
             eventHits.clear();eventKills.clear();eventDeaths.clear();waveMobs.clear();
@@ -584,6 +622,21 @@ public final class Thoridrop {
             return;
         }
         if (session.phase() == DropSession.Phase.COMBAT) {
+            // Count only time without a living, connected, non-spectating participant
+            // still near the event. Any active participant immediately resets the timer.
+            boolean activeParticipant=participants.stream().anyMatch(id -> {
+                ServerPlayer player=dropLevel.getServer().getPlayerList().getPlayer(id);
+                return player!=null && player.level()==dropLevel && player.isAlive()
+                    && !player.isSpectator() && !player.isCreative()
+                    && !respawnBudget.eliminated(id)
+                    && player.distanceToSqr(dropPosition.getX()+0.5,
+                        dropPosition.getY()+0.5,dropPosition.getZ()+0.5)<=96.0*96.0;
+            });
+            if(activeParticipant)emptyCombatTicks=0;
+            else if(++emptyCombatTicks>=emptyCombatTimeoutSeconds*20) {
+                cancelAbandonedCombat();
+                return;
+            }
             combatTicks++;
             if(waveDelay==0 && session.wave()<5 && ++eliteAbilityTicks%80==0)
                 tickEliteAbilities();
@@ -1528,6 +1581,7 @@ public final class Thoridrop {
             return;
         }
         if (session.activate()) {
+            emptyCombatTicks=0;
             ThoridropCheckpoint.write(new ThoridropCheckpoint.Snapshot(
                 session.eventId(),dropLevel.dimension().toString(),dropPosition.getX(),
                 dropPosition.getY(),dropPosition.getZ(),session.rarity(),"COMBAT"));
