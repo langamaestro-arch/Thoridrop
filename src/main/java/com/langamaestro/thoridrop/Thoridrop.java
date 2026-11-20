@@ -250,6 +250,9 @@ public final class Thoridrop {
         DropBlocks.register(modBus);
         DropItems.register(modBus);
         NeoForge.EVENT_BUS.register(this);
+        // Curios inventory is distinct from vanilla inventory and has separate death handling.
+        // Preserve its slots only when Thoridrop has already saved this player's death inventory.
+        ThoridropCuriosCompat.register(player -> deathInventories.containsKey(player.getUUID()));
         LOGGER.info("Thoridrop initialized");
     }
 
