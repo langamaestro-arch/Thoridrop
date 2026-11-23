@@ -40,8 +40,11 @@ public final class Thoridrop {
     private boolean configLoaded;
     private boolean multiplayerEnabled = true;
     private boolean preserveInventoryOnEventDeath = true;
-    private int maxChallengeRespawns = 5;
-    private final DropRespawnBudget respawnBudget = new DropRespawnBudget(5);
+    private int maxChallengeRespawns = 2;
+    private int maxDeathsToFail = 3;
+    private final java.util.Map<UUID,Integer> bossRetaliationDue=new java.util.HashMap<>();
+    private final java.util.Map<UUID,Integer> bossRetaliationLast=new java.util.HashMap<>();
+    private final DropRespawnBudget respawnBudget = new DropRespawnBudget(2);
     private int participationRadius = 24;
     private int rewardClaimTimeoutTicks = 20 * 600;
     private int rewardTicks;
@@ -108,7 +111,8 @@ public final class Thoridrop {
         props.setProperty("participation_radius_blocks", "24");
         props.setProperty("reward_claim_timeout_seconds", "600");
         props.setProperty("keep_inventory_on_event_death", "true");
-        props.setProperty("max_event_respawns", "5");
+        props.setProperty("max_event_respawns", "2");
+        props.setProperty("max_deaths_before_failure", "3");
         props.setProperty("mob_count_percent", "100");
         props.setProperty("extra_mobs_per_additional_player", "2");
         props.setProperty("max_extra_mobs", "12");
@@ -144,8 +148,10 @@ public final class Thoridrop {
             extraordinaryExtraMobs = Math.max(0,Math.min(12,Integer.parseInt(props.getProperty("extraordinary_extra_mobs","4"))));
             multiplayerEnabled = Boolean.parseBoolean(props.getProperty("multiplayer_enabled", "true"));
             preserveInventoryOnEventDeath = Boolean.parseBoolean(props.getProperty("keep_inventory_on_event_death", "true"));
-            maxChallengeRespawns = Math.max(0,Math.min(100,Integer.parseInt(props.getProperty("max_event_respawns","5"))));
-            respawnBudget.setLimit(maxChallengeRespawns);
+            maxChallengeRespawns = Math.max(0,Math.min(100,Integer.parseInt(props.getProperty("max_event_respawns","2"))));
+            maxDeathsToFail = Math.max(1,Math.min(20,Integer.parseInt(props.getProperty("max_deaths_before_failure","3"))));
+            // Existing servers with max_event_respawns=5 must still fail on the third death.
+            respawnBudget.setLimit(Math.min(maxChallengeRespawns,maxDeathsToFail-1));
             participationRadius = Math.max(8, Math.min(96, Integer.parseInt(props.getProperty("participation_radius_blocks", "24"))));
             rewardClaimTimeoutTicks = Math.max(30, Math.min(86400, Integer.parseInt(props.getProperty("reward_claim_timeout_seconds", "600")))) * 20;
             mobMultiplierPercent = Math.max(25, Math.min(300, Integer.parseInt(props.getProperty("mob_count_percent", "100"))));
@@ -177,9 +183,13 @@ public final class Thoridrop {
 
     /** Abandoned in-progress challenges must not block all future drops. */
     private void cancelAbandonedCombat() {
-        if(session==null || session.phase()!=DropSession.Phase.COMBAT)return;
-        broadcast("§c✦ THORIDROP | Desafío cancelado: "+emptyCombatTimeoutSeconds+
+        cancelCombat("§c✦ THORIDROP | Desafío cancelado: "+emptyCombatTimeoutSeconds+
             " segundos sin participantes activos. Sin recompensas.");
+    }
+
+    private void cancelCombat(String reason) {
+        if(session==null || session.phase()!=DropSession.Phase.COMBAT)return;
+        broadcast(reason);
         if(dropLevel!=null) {
             for(UUID id:waveMobs) {
                 net.minecraft.world.entity.Entity mob=dropLevel.getEntity(id);
@@ -195,6 +205,8 @@ public final class Thoridrop {
         respawnTeleportQueue.clear();
         participants.clear();
         playerOutOfRangeTicks.clear();
+        bossRetaliationDue.clear();
+        bossRetaliationLast.clear();
         removeBeaconLight();
         clearHud();
         session.finish();
@@ -434,6 +446,8 @@ public final class Thoridrop {
         claimedRewards.clear();
         participants.clear();
         respawnBudget.reset();
+        bossRetaliationDue.clear();
+        bossRetaliationLast.clear();
         completedStats.clear();
         eventDeaths.clear();
         eventHits.clear();
@@ -509,6 +523,7 @@ public final class Thoridrop {
             emptyCombatTicks=0;
             participants.clear();claimedRewards.clear();completedStats.clear();
             respawnBudget.reset();
+            bossRetaliationDue.clear();bossRetaliationLast.clear();
             eventHits.clear();eventKills.clear();eventDeaths.clear();waveMobs.clear();
             eventBar=new net.minecraft.server.level.ServerBossEvent(
                 UUID.randomUUID(),Component.literal("✦ THORIDROP  •  "+rarityName(old.rarity())),
@@ -643,7 +658,12 @@ public final class Thoridrop {
             combatTicks++;
             if(waveDelay==0 && session.wave()<5 && ++eliteAbilityTicks%80==0)
                 tickEliteAbilities();
-            if (session.wave() == 5 && session.rarity() == DropSession.Rarity.LEGENDARY && waveDelay == 0 && !waveMobs.isEmpty()) tickGuardianAbility();
+            if (session.wave()==5 && waveDelay==0 && !waveMobs.isEmpty()) {
+                if(session.rarity()==DropSession.Rarity.LEGENDARY)tickGuardianAbility();
+                tickGuardianRetaliation();
+            } else {
+                bossRetaliationDue.clear();
+            }
             for (ServerPlayer player : dropLevel.players()) {
                 if ((multiplayerEnabled || participants.isEmpty() || participants.contains(player.getUUID()))
                         && !player.isSpectator() && !player.isCreative()
@@ -977,7 +997,7 @@ public final class Thoridrop {
     }
 
     private void checkTowerExploit() {
-        if (session == null || session.wave() >= 5 || towerReinforcements >= 2) return;
+        if (session == null || towerReinforcements >= 2) return;
         if (++towerCheckTicks < 12) return;
         towerCheckTicks = 0;
         ServerPlayer elevated = null;
@@ -1010,6 +1030,76 @@ public final class Thoridrop {
             waveTotal++;
             towerReinforcements++;
             broadcast("Refuerzos a distancia: el suministro esta siendo defendido.");
+        }
+    }
+
+    /**
+     * Boss anti-camping ability: a visible two-second warning followed by an avoidable
+     * ranged magical strike if the player stays above or far from the actual boss.
+     * Native Nicktale boss goals and the existing HUD remain untouched.
+     */
+    private void tickGuardianRetaliation() {
+        if(dropLevel==null || dropPosition==null || session==null)return;
+        net.minecraft.world.entity.LivingEntity guardian=null;
+        for(UUID id:waveMobs) {
+            var entity=dropLevel.getEntity(id);
+            if(entity instanceof net.minecraft.world.entity.LivingEntity living
+                && living.isAlive()
+                && net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(
+                    living.getType()).getNamespace().equals("nicktaleepicdungeons")) {
+                guardian=living;
+                break;
+            }
+        }
+        if(guardian==null)return;
+        final net.minecraft.world.entity.LivingEntity boss=guardian;
+        int cooldown=switch(session.rarity()) {case COMMON->160;case RARE->120;case LEGENDARY->80;};
+        float damage=switch(session.rarity()) {case COMMON->3.0f;case RARE->4.0f;case LEGENDARY->5.0f;};
+        for(ServerPlayer player:dropLevel.players()) {
+            UUID id=player.getUUID();
+            if(!participants.contains(id)||!player.isAlive()
+                ||player.isCreative()||player.isSpectator())continue;
+            boolean within=player.distanceToSqr(dropPosition.getX()+0.5,
+                dropPosition.getY()+0.5,dropPosition.getZ()+0.5)<32*32;
+            double dist=player.distanceToSqr(boss);
+            boolean camping=within && dist<32*32 &&
+                (player.getY()>boss.getY()+3.0 || dist>14*14);
+            Integer due=bossRetaliationDue.get(id);
+            if(!camping) {
+                bossRetaliationDue.remove(id);
+                continue;
+            }
+            if(due!=null) {
+                // Mark the warning with particles; 40 ticks later, check again and strike.
+                if(combatTicks<due) {
+                    if(combatTicks%10==0)dropLevel.sendParticles(
+                        net.minecraft.core.particles.ParticleTypes.END_ROD,
+                        player.getX(),player.getY()+1.2,player.getZ(),12,0.35,0.3,0.35,0.02);
+                } else {
+                    bossRetaliationDue.remove(id);
+                    bossRetaliationLast.put(id,combatTicks);
+                    // Particles trace the bolt between the boss and the elevated target.
+                    for(int n=0;n<10;n++) {
+                        double t=n/9.0;
+                        dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
+                            boss.getX()+(player.getX()-boss.getX())*t,
+                            boss.getY()+1.4+(player.getY()-boss.getY())*t,
+                            boss.getZ()+(player.getZ()-boss.getZ())*t,
+                            2,0.05,0.05,0.05,0.01);
+                    }
+                    player.hurtServer(dropLevel,dropLevel.damageSources().magic(),damage);
+                    if(session.rarity()!=DropSession.Rarity.COMMON)
+                        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.SLOWNESS,50,0));
+                }
+            } else if(combatTicks-bossRetaliationLast.getOrDefault(id,-cooldown)>=cooldown) {
+                bossRetaliationDue.put(id,combatTicks+40);
+                player.sendSystemMessage(Component.literal(
+                    "§c✦ THORIDROP | ¡El guardián prepara un ataque a distancia! "
+                    +"Baja de la torre o acércate para esquivarlo."));
+                dropLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
+                    boss.getX(),boss.getY()+2,boss.getZ(),24,0.7,0.7,0.7,0.03);
+            }
         }
     }
 
@@ -1463,7 +1553,8 @@ public final class Thoridrop {
             }
             return;
         }
-        if (!fightingNearDrop(player) || respawnBudget.eliminated(player.getUUID())) return;
+        if (!fightingNearDrop(player) || respawnBudget.eliminated(player.getUUID())
+            || !participants.contains(player.getUUID())) return;
         UUID id=player.getUUID();
         eventDeaths.add(id);
         DropStatistics.streak(id,false);
@@ -1478,6 +1569,18 @@ public final class Thoridrop {
                 saved.add(player.getInventory().getItem(i).copy());
             deathInventories.put(id,saved);
             deathExperience.put(id,player.totalExperience);
+        }
+        if(!respawnAtCrate) {
+            // End the entire event on the third death of any enrolled player.
+            // Inventory restoration stays queued for the victim's respawn.
+            respawnPending.remove(id);
+            respawnTeleportQueue.remove(id);
+            cancelCombat("§c✦ THORIDROP | "+player.getGameProfile().name()+
+                " ha alcanzado el límite de "+maxDeathsToFail+
+                " muertes. ¡Desafío fallido para todos! Sin recompensas.");
+            player.sendSystemMessage(Component.literal(
+                "§c✦ THORIDROP | Reaparecerás en tu cama o punto normal."));
+            return;
         }
         if(respawnAtCrate) {
             participants.add(id);
