@@ -22,6 +22,20 @@ public final class DropRespawnBudgetTest {
         budget.setLimit(0);
         budget.reset();
         if(budget.onDeath(player))throw new AssertionError("Zero lives should force vanilla spawn");
+        // Server rule: two crate respawns; the third death fails the entire event.
+        budget.setLimit(2);
+        budget.reset();
+        if(!budget.onDeath(player) || budget.remaining(player)!=1)
+            throw new AssertionError("First death should return to the event");
+        if(!budget.onDeath(player) || budget.remaining(player)!=0)
+            throw new AssertionError("Second death should return to the event");
+        if(budget.onDeath(player) || !budget.eliminated(player))
+            throw new AssertionError("Third death must fail the challenge");
+        if(!budget.onDeath(teammate))
+            throw new AssertionError("Other participants must retain independent death counters");
+        budget.reset();
+        if(budget.eliminated(player) || !budget.onDeath(player))
+            throw new AssertionError("New challenges must reset death counters");
         System.out.println("Thoridrop respawn budget tests passed");
     }
 }
