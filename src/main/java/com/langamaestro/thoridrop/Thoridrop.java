@@ -1053,8 +1053,9 @@ public final class Thoridrop {
         }
         if(guardian==null)return;
         final net.minecraft.world.entity.LivingEntity boss=guardian;
-        int cooldown=switch(session.rarity()) {case COMMON->160;case RARE->120;case LEGENDARY->80;};
-        float damage=switch(session.rarity()) {case COMMON->3.0f;case RARE->4.0f;case LEGENDARY->5.0f;};
+        DropSession.Rarity bossRarity=session.rarity();
+        int cooldown=switch(bossRarity) {case COMMON->160;case RARE->120;case LEGENDARY->80;};
+        float damage=switch(bossRarity) {case COMMON->3.0f;case RARE->4.0f;case LEGENDARY->5.0f;};
         for(ServerPlayer player:dropLevel.players()) {
             UUID id=player.getUUID();
             if(!participants.contains(id)||!player.isAlive()
@@ -1087,10 +1088,12 @@ public final class Thoridrop {
                             boss.getZ()+(player.getZ()-boss.getZ())*t,
                             2,0.05,0.05,0.05,0.01);
                     }
-                    player.hurtServer(dropLevel,dropLevel.damageSources().magic(),damage);
-                    if(session.rarity()!=DropSession.Rarity.COMMON)
+                    if(bossRarity!=DropSession.Rarity.COMMON)
                         player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                             net.minecraft.world.effect.MobEffects.SLOWNESS,50,0));
+                    // A lethal strike may cancel the event immediately.
+                    player.hurtServer(dropLevel,dropLevel.damageSources().magic(),damage);
+                    if(session==null)return;
                 }
             } else if(combatTicks-bossRetaliationLast.getOrDefault(id,-cooldown)>=cooldown) {
                 bossRetaliationDue.put(id,combatTicks+40);
